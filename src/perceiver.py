@@ -5,140 +5,101 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def fourier_encode(x: Tensor, max_freq: int, num_bands: int = 4) -> Tensor:
-    """
-    Encodes the input tensor using fourier features
+class PerceiverBlock(nn.Module):
+    def __init__(self, dim: int, num_heads: int):
+        """
+        Perceiver block
 
-    :param x:
-    :param max_freq:
-    :param num_bands:
-    :return:
-    """
-    x = x.unsqueeze(-1)  # Add a dimension at the end
-
-    freq_scale = torch.linespace(1., max_freq / 2, num_bands)
-
-    # Compute the fourier features
-    x_f = x * freq_scale * np.pi
-
-    x = torch.cat([torch.sin(x_f), torch.cos(x_f)], dim=-1)
-    x = torch.cat((x_f, x), dim=-1)
-    return x
-
-
-class FeedForward(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int):
+        :param dim:
+        :param num_heads:
+        """
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, dim),
-            # nn.Dropout(0.1)
+        self.dim = dim
+        self.num_heads = num_heads
+
+        # Normalization before the cross attention
+        self.latent_norm = nn.LayerNorm(dim)
+        self.input_norm = nn.LayerNorm(dim)
+
+        # Cross attention
+        self.attention = nn.MultiheadAttention(
+            dim,
+            num_heads,
+            dropout=0.0,
+            bias=False
         )
 
-    def forward(self, x):
-        return self.net(x)
+        # Project the output of the cross attention
+        self.proj = nn.Linear(dim, dim)
 
+        # Dense layer
+        self.dense = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(dim, dim)
+        )
 
-class Normalize(nn.Module):
-    def __init__(self, dim: int, module: nn.Module):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.module = module
+    def forward(self, input: Tensor, latent: Tensor) -> Tensor:
+        # Normalize the input
+        latent_norm = self.latent_norm(latent)
+        input_norm = self.input_norm(input)
 
-    def forward(self, x):
-        return self.module(self.norm(x))
+        # Compute the cross attention
+        attention = self.attention(latent_norm, input_norm, input_norm)
 
+        # Project the output of the cross attention
+        proj = self.proj(attention)
 
-class Attention(nn.Module):
-    def __init__(self, q_dim: int, k_dim: int, v_dim: int, heads: int = 8, dim_head: int = 64):
-        super().__init__()
-        self.heads = heads
-        self.dim_head = dim_head
-        self.q_dim = q_dim
-        self.k_dim = k_dim
-        self.v_dim = v_dim
+        # Compute dense layer
+        dense = self.dense(proj)
 
-        # Q, K, V linear transformations
-        self.to_q = nn.Linear(q_dim, heads * dim_head, bias=False)
-        self.to_k = nn.Linear(k_dim, heads * dim_head, bias=False)
-        self.to_v = nn.Linear(v_dim, heads * dim_head, bias=False)
-
-    def forward(self, x):
-        q = self.to_q(x)
-        k = self.to_k(x)
-        v = self.to_v(x)
-
-        # Attention formula : softmax(QK^T / sqrt(d_k))V
-        score = torch.bmm(q, k.transpose(1, 2))
-        score /= self.dim_head ** 0.5
-        score = F.softmax(score, dim=-1)
-        attention = torch.bmm(score, v)
-        return attention
+        return dense + latent
 
 
 class Perceiver(nn.Module):
     def __init__(
             self,
+            dim: int,
             depth: int,
-            max_freq: int,
-            num_bands: int,
-            input_dim: int,
             latent_dim: int,
-            cross_heads: int = 1,
-            latent_heads: int = 8,
-            cross_dim_head: int = 64,
-            latent_dim_head: int = 64,
-            num_latents: int = 256,
-            num_cross_attn: int = 1,
+            heads: int,
+            latent_blocks: int,
     ):
+        """
+        Perceiver model
+
+        :param depth:
+        :param latent_dim:
+        :param dim:
+        """
         super().__init__()
         self.depth = depth
-        self.max_freq = max_freq
-        self.num_bands = num_bands
-        self.input_dim = input_dim
+        self.dim = dim
+        self.latent_dim = latent_dim
+        self.heads = heads
 
-        self.cross_att = self.cross_attention()
-        self.cross_ff = self.cross_ff()
-        self.latent_att = self.latent_attention()
-        self.latent_ff = self.latent_ff()
+        # The latent array is randomly initialized using a truncated normal distribution with
+        # mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
+        self.latent = nn.Parameter(torch.nn.init.trunc_normal_(
+            torch.zeros(self.latent_dim, self.dim),
+            mean=0,
+            std=0.02,
+            a=-2, b=2)
+        )
 
-        self.n_cross_attn = 2
+        self.cross_attentions = PerceiverBlock(dim, num_heads=1)
+        self.latent_transform = nn.ModuleList([
+           PerceiverBlock(dim, num_heads=self.heads) for _ in range(latent_blocks)
+        ])
 
-        self.layers = nn.ModuleList([])
+    def forward(self, x: Tensor):
+        # Compute the latent array
 
-        for i in range(depth):
-            self_attns = nn.ModuleList([])
-
-            for block_ind in range(self.n_cross_attn):
-                self_attns.append(nn.ModuleList([
-                    self.latent_att(key=block_ind),
-                    self.latent_ff(key=block_ind)
-                ]))
-
-            self.layers.append(nn.ModuleList([self.cross_attn, self.cross_ff, self_attns]))
-
-        # self.classifier = nn.Linear(latent_dim, 10)
-
-    def forward(self, x):
+        for _ in range(self.depth):
+            latent = self.cross_attentions(x, self.latent)
+            for block in self.latent_transform:
+                latent = block(x, latent)
         return
 
-    def cross_attention(self):
-        cross_attn = Attention(self.q_dim, self.k_dim, self.v_dim)
-        cross_attn_norm = Normalize(self.dim, cross_attn)
-        return cross_attn_norm
-
-    def cross_ff(self):
-        cross_ff = FeedForward(self.dim, self.hidden_dim)
-        cross_ff_norm = Normalize(self.dim, cross_ff)
-        return cross_ff_norm
-
-    def latent_attention(self):
-        latent_attn = Attention(self.q_dim, self.k_dim, self.v_dim)
-        latent_attn_norm = Normalize(self.dim, latent_attn)
-        return latent_attn_norm
-
-    def latent_ff(self):
-        latent_ff = FeedForward(self.dim, self.hidden_dim)
-        latent_ff_norm = Normalize(self.dim, latent_ff)
-        return latent_ff_norm
