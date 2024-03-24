@@ -4,6 +4,8 @@ from torch import Tensor
 import torch.nn.functional as F
 import numpy as np
 
+from src.embedding import fourier_encode
+
 
 class PerceiverBlock(nn.Module):
     def __init__(self, dim: int, num_heads: int):
@@ -97,7 +99,7 @@ class Perceiver(nn.Module):
 
     def forward(self, x: Tensor):
         # Positional encoding
-        x = fourier_encode(x, max_freq=10, num_bands=4)
+        x = torch.cat([x, fourier_encode(x, max_freq=10, num_bands=4)], dim=1)
 
         for _ in range(self.depth):
             self.latent = self.cross_attentions(x, self.latent)
