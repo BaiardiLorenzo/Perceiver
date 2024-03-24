@@ -59,6 +59,7 @@ class PerceiverBlock(nn.Module):
 
 
 class Perceiver(nn.Module):
+
     def __init__(
             self,
             dim: int,
@@ -95,11 +96,12 @@ class Perceiver(nn.Module):
         ])
 
     def forward(self, x: Tensor):
-        # Compute the latent array
+        # Positional encoding
+        x = fourier_encode(x, max_freq=10, num_bands=4)
 
         for _ in range(self.depth):
-            latent = self.cross_attentions(x, self.latent)
+            self.latent = self.cross_attentions(x, self.latent)
             for block in self.latent_transform:
-                latent = block(x, latent)
+                self.latent = block(self.latent, self.latent)
         return
 
