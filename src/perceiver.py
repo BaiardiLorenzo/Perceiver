@@ -1,63 +1,9 @@
 import torch
 from torch import nn
 from torch import Tensor
-import torch.nn.functional as F
-import numpy as np
 
-from src.embedding import fourier_encode
-
-
-class PerceiverBlock(nn.Module):
-    def __init__(self, dim: int, num_heads: int):
-        """
-        Perceiver block
-
-        :param dim:
-        :param num_heads:
-        """
-        super().__init__()
-        self.dim = dim
-        self.num_heads = num_heads
-
-        # Normalization before the cross attention
-        self.latent_norm = nn.LayerNorm(dim)
-        self.input_norm = nn.LayerNorm(dim)
-
-        # Cross attention
-        self.attention = nn.MultiheadAttention(
-            dim,
-            num_heads,
-            dropout=0.0,
-            bias=False
-        )
-
-        # Project the output of the cross attention
-        self.proj = nn.Linear(dim, dim)
-
-        # Dense layer
-        self.dense = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.Linear(dim, dim),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(dim, dim)
-        )
-
-    def forward(self, input: Tensor, latent: Tensor) -> Tensor:
-        # Normalize the input
-        latent_norm = self.latent_norm(latent)
-        input_norm = self.input_norm(input)
-
-        # Compute the cross attention
-        attention = self.attention(latent_norm, input_norm, input_norm)
-
-        # Project the output of the cross attention
-        proj = self.proj(attention)
-
-        # Compute dense layer
-        dense = self.dense(proj)
-
-        return dense + latent
+from src.embedding import PositionalFourierEmbedding
+from src.layers import LatentArray, PerceiverBlock, Classifier
 
 
 class Perceiver(nn.Module):
@@ -66,44 +12,62 @@ class Perceiver(nn.Module):
             self,
             dim: int,
             depth: int,
+            latent_blocks: int,
             latent_dim: int,
             heads: int,
-            latent_blocks: int,
+            num_classes: int,
+            embed_dim: int,
+            num_bands: int,
     ):
         """
         Perceiver model
 
-        :param depth:
-        :param latent_dim:
         :param dim:
+        :param depth:
+        :param latent_blocks:
+        :param latent_dim:
+        :param heads:
+        :param num_classes:
         """
         super().__init__()
-        self.depth = depth
         self.dim = dim
-        self.latent_dim = latent_dim
+        self.depth = depth
+        self.latent_blocks = latent_blocks
         self.heads = heads
+        self.latent_dim = latent_dim
+        self.embed_dim = embed_dim
+        self.num_bands = num_bands
+        self.num_classes = num_classes
 
-        # The latent array is randomly initialized using a truncated normal distribution with
-        # mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
-        self.latent = nn.Parameter(torch.nn.init.trunc_normal_(
-            torch.zeros(self.latent_dim, self.dim),
-            mean=0,
-            std=0.02,
-            a=-2, b=2)
-        )
+        self.positional_embedding = PositionalFourierEmbedding(dim, embed_dim=self.embed_dim, num_bands=self.num_bands)
 
-        self.cross_attentions = PerceiverBlock(dim, num_heads=1)
-        self.latent_transform = nn.ModuleList([
-           PerceiverBlock(dim, num_heads=self.heads) for _ in range(latent_blocks)
+        # The latent array
+        self.latent = LatentArray(dim, latent_dim)
+
+        # Perceiver block -> @TODO Share the weights for every block
+        self.layers = nn.ModuleList([
+            PerceiverBlock(dim, heads, latent_blocks)
+            for _ in range(depth)
         ])
+
+        # self.block = PerceiverBlock(dim, heads, latent_blocks)
+
+        # Classifier
+        self.classifier = Classifier(dim, num_classes)
 
     def forward(self, x: Tensor):
         # Positional encoding
-        x = torch.cat([x, fourier_encode(x, max_freq=10, num_bands=4)], dim=1)
+        x = self.positional_embedding(x)
 
-        for _ in range(self.depth):
-            self.latent = self.cross_attentions(x, self.latent)
-            for block in self.latent_transform:
-                self.latent = block(self.latent, self.latent)
-        return
+        # Compute the perceiver block
+        # @TODO Share the weights for every block
+        for layer in self.layers:
+            x = layer(x, self.latent)
 
+        # Compute the perceiver block share the weights
+        # for _ in range(self.depth):
+        #     x = self.block(x, self.latent)
+
+        # Classifier
+        x = self.classifier(x)
+        return x
