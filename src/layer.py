@@ -1,36 +1,10 @@
-import torch
 from torch import nn, Tensor
-
-
-class LatentArray(nn.Module):
-    def __init__(self, dim: int, latent_dim: int):
-        """
-        Latent array
-
-        :param dim:
-        :param latent_dim:
-        """
-        super().__init__()
-        self.dim = dim
-        self.latent_dim = latent_dim
-
-        # The latent array is randomly initialized using a truncated normal distribution with
-        # mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
-        self.latent = nn.Parameter(torch.nn.init.trunc_normal_(
-            torch.zeros(self.latent_dim, self.dim),
-            mean=0,
-            std=0.02,
-            a=-2, b=2)
-        )
-
-    def forward(self) -> Tensor:
-        return self.latent
 
 
 class DenseBlock(nn.Module):
     def __init__(self, dim: int, dropout: float = 0.0):
         """
-        Dense block
+        FeedForward block
 
         :param dim:
         :param dropout:
@@ -38,12 +12,13 @@ class DenseBlock(nn.Module):
         super().__init__()
         self.dim = dim
         self.dropout = dropout
+
         self.net = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.Linear(dim, dim),
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
             nn.GELU(),
             nn.Dropout(self.dropout),
-            nn.Linear(dim, dim)
+            nn.Linear(self.dim, self.dim)
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -51,36 +26,40 @@ class DenseBlock(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    def __init__(self, dim: int, heads: int, dropout: float = 0.0):
+    def __init__(self, emb_dim: int, input_dim: int, heads: int, dropout: float = 0.0):
         """
         Attention block
+        @TODO Rewrite MultiHeadAttention separately
 
-        :param dim:
+        :param emb_dim:
         :param heads:
         :param dropout:
         """
         super().__init__()
-        self.dim = dim
+        self.emb_dim = emb_dim
+        self.input_dim = input_dim
         self.num_heads = heads
         self.dropout = dropout
 
         # Normalization before the cross attention
-        self.latent_norm = nn.LayerNorm(dim)
-        self.input_norm = nn.LayerNorm(dim)
+        self.latent_norm = nn.LayerNorm(self.emb_dim)
+        self.input_norm = nn.LayerNorm(self.input_dim)
 
         # Cross attention
         self.attention = nn.MultiheadAttention(
-            dim,
-            heads,
-            dropout=0.0,
+            self.emb_dim,
+            self.num_heads,
+            kdim=self.input_dim,
+            vdim=self.input_dim,
+            dropout=self.dropout,
             bias=False
         )
 
         # Project the output of the cross attention
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(emb_dim, emb_dim)
 
         # Dense layer
-        self.dense = DenseBlock(dim, dropout=dropout)
+        self.dense = DenseBlock(emb_dim, dropout=dropout)
 
     def forward(self, x: Tensor, z: Tensor) -> Tensor:
         """

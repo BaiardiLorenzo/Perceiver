@@ -3,7 +3,7 @@ from torch import nn
 from torch import Tensor
 
 from src.embedding import PositionalFourierEmbedding
-from src.layers import LatentArray, PerceiverBlock, Classifier
+from src.layer import LatentArray, PerceiverBlock, Classifier
 
 
 class Perceiver(nn.Module):
