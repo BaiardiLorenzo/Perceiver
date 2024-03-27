@@ -1,9 +1,8 @@
-import torch
 from torch import nn
 from torch import Tensor
 
-from src.embedding import PositionalFourierEmbedding
-from src.layer import LatentArray, PerceiverBlock, Classifier
+from src.embedding import PositionalFourierEmbedding, create_latent_array
+from src.layer import PerceiverBlock, Classifier
 
 
 class Perceiver(nn.Module):
@@ -18,6 +17,7 @@ class Perceiver(nn.Module):
             num_classes: int,
             embed_dim: int,
             num_bands: int,
+            batch_size: int
     ):
         """
         Perceiver model
@@ -28,6 +28,9 @@ class Perceiver(nn.Module):
         :param latent_dim:
         :param heads:
         :param num_classes:
+        :param embed_dim:
+        :param num_bands:
+        :param batch_size:
         """
         super().__init__()
         self.dim = dim
@@ -38,11 +41,12 @@ class Perceiver(nn.Module):
         self.embed_dim = embed_dim
         self.num_bands = num_bands
         self.num_classes = num_classes
+        self.batch_size = batch_size
 
         self.positional_embedding = PositionalFourierEmbedding(dim, embed_dim=self.embed_dim, num_bands=self.num_bands)
 
         # The latent array
-        self.latent = LatentArray(dim, latent_dim)
+        self.latent = create_latent_array(self.batch_size, self.latent_dim, self.dim)
 
         # Perceiver block -> @TODO Share the weights for every block
         self.layers = nn.ModuleList([
