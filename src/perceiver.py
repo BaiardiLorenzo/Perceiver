@@ -1,7 +1,10 @@
+import torch
+
 from torch import nn
 from torch import Tensor
 
-from src.embedding import PositionalFourierEmbedding, create_latent_array
+from src.embedding import create_latent_array
+from src.fourier_encode import encoded_position
 from src.layer import PerceiverBlock, Classifier
 
 
@@ -16,6 +19,8 @@ class Perceiver(nn.Module):
             heads: int,
             num_classes: int,
             embed_dim: int,
+            fourier_encode: bool,
+            max_freq: int,
             num_bands: int,
             batch_size: int
     ):
@@ -29,6 +34,8 @@ class Perceiver(nn.Module):
         :param heads:
         :param num_classes:
         :param embed_dim:
+        :param fourier_encode:
+        :param max_freq:
         :param num_bands:
         :param batch_size:
         """
@@ -39,11 +46,11 @@ class Perceiver(nn.Module):
         self.heads = heads
         self.latent_dim = latent_dim
         self.embed_dim = embed_dim
+        self.fourier_encode = fourier_encode
+        self.max_freq = max_freq
         self.num_bands = num_bands
         self.num_classes = num_classes
         self.batch_size = batch_size
-
-        self.positional_embedding = PositionalFourierEmbedding(dim, embed_dim=self.embed_dim, num_bands=self.num_bands)
 
         # The latent array
         self.latent = create_latent_array(self.batch_size, self.latent_dim, self.dim)
@@ -54,23 +61,25 @@ class Perceiver(nn.Module):
             for _ in range(depth)
         ])
 
-        # self.block = PerceiverBlock(dim, heads, latent_blocks)
-
         # Classifier
         self.classifier = Classifier(dim, num_classes)
 
     def forward(self, x: Tensor):
+        batch, *dims, channels = x.shape
+
         # Positional encoding
-        x = self.positional_embedding(x)
+        if self.fourier_encode:
+            x = encoded_position(x, dims, self.batch_size, self.max_freq, self.num_bands, x.device, x.dtype)
+
+        x = x.view(batch, torch.prod(torch.tensor(dims)).item(), channels)
+
+        # Repeat the same latent array for all batch_size
+        self.latent = self.latents.unsqueeze(0).expand(batch, -1, -1)
 
         # Compute the perceiver block
         # @TODO Share the weights for every block
         for layer in self.layers:
             x = layer(x, self.latent)
-
-        # Compute the perceiver block share the weights
-        # for _ in range(self.depth):
-        #     x = self.block(x, self.latent)
 
         # Classifier
         x = self.classifier(x)

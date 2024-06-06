@@ -46,14 +46,6 @@ class TestPositionalEmbedding(unittest.TestCase):
 
         self.assertEqual(z.shape, (batch_size, d_channels, latent_dim))
 
-    def test_positional_embedding_shape(self):
-        """
-        Test that the positional embedding shape is correct
-        DxN -> BxDxN
-
-        :return:
-        """
-
 
 if __name__ == '__main__':
     unittest.main()
