@@ -28,18 +28,7 @@ def main():
     els saturated in performance within 50,000 training steps
     """
 
-    cross_attentions = 2
-    self_attentions_for_each_block = 6
-    max_freq = 1120
-    num_bands = 64
-    batch_size = 512 # TODO: Check if this batch size fits 
-    optimizer = LAMB() # The LAMB optimizer have a default learning rate of 1e-3
-    loss = nn.CrossEntropyLoss()
-
-    loss = 0
-    epochs = 10
-
-    model = Perceiver().to(device)
+    batch_size = 64  # 512 
 
     # Training and test datasets
     train_dataset = ModelNet(root="./dataset", name="40", train=True)
@@ -56,6 +45,31 @@ def main():
         notes="",
         tags=[]
     )
+
+    depth = 2
+    latent_block = 6
+    max_freq = 1120
+    num_bands = 64
+    epochs = 120
+    lr = 1e-3
+
+    model = Perceiver(
+        input_dim=3,
+        len_shape=1024,
+        emb_dim=512,
+        latent_dim=512,
+        batch_size=batch_size,
+        num_classes=40,
+        depth=depth,
+        latent_blocks=latent_block,
+        heads=8,
+        fourier_encode=True,
+        max_freq=max_freq,
+        num_bands=num_bands
+    ).to(device)
+
+    optimizer = LAMB(params=model.parameters(), lr=lr)
+    # loss = nn.CrossEntropyLoss()
 
     for epoch in range(epochs):
         train_epoch(model, train_dataloader, optimizer, epoch, device)

@@ -14,19 +14,21 @@ class Perceiver(nn.Module):
             self,
             input_dim: int,
             len_shape: int,
-            emb_dim: int,
-            latent_dim: int,
-            batch_size: int,
-            num_classes: int,
-            depth: int,
-            latent_blocks: int,
-            heads: int,
-            fourier_encode: bool,
-            max_freq: int,
-            num_bands: int
+            emb_dim: int = 512,
+            latent_dim: int = 512,
+            batch_size: int = 64,
+            num_classes: int = 40,
+            depth: int = 2,
+            latent_blocks: int = 6,
+            heads: int = 8,
+            fourier_encode: bool = True,
+            max_freq: int = 1120,
+            num_bands: int = 64
     ):
         """
         Perceiver model
+
+        TODO Write the documentation for the base model of Perceiver
 
         :param input_dim: The channel dimension of the input tensor
         :param len_shape: The length of the shape of the input tensor
@@ -35,7 +37,7 @@ class Perceiver(nn.Module):
         :param batch_size: The batch size
         :param num_classes: The number of classes for the classification task
         :param depth: The number of perceiver blocks
-        :param latent_blocks: The number of latent blocks in the perceiver block
+        :param latent_blocks: The number of latent blocks for every perceiver block
         :param heads: The number of heads in the multi-head attention in the perceiver block
         :param fourier_encode: Whether to use Fourier encoding
         :param max_freq: The maximum frequency for Fourier encoding
@@ -61,11 +63,7 @@ class Perceiver(nn.Module):
         if fourier_encode:
             self.input_dim = (self.len_shape * (num_bands * 2 + 1)) + self.input_dim
 
-        # Perceiver block -> @TODO Share the weights for every block
-        self.layers = nn.ModuleList([
-            PerceiverBlock(self.emb_dim, self.input_dim, heads, latent_blocks)
-            for _ in range(self.depth)
-        ])
+        self.layers = PerceiverBlock(self.emb_dim, self.input_dim, self.heads, self.latent_blocks)
 
         # Classifier
         self.classifier = Classifier(self.emb_dim, self.num_classes)
@@ -83,11 +81,9 @@ class Perceiver(nn.Module):
         # Permute the input tensor to the shape (M, B, INPUT_DIM)
         xx = x.permute(2, 0, 1)
 
-        # Compute the perceiver block
-        # TODO Share the weights for every block
-        for layer in self.layers:
-            x = layer(xx, self.latent)
-            
+        # Compute the perceiver block sharing the weights of the model
+        for _ in range(self.depth):
+            x = self.layers(xx, self.latent)    
 
         # Classifier
         x = self.classifier(x)

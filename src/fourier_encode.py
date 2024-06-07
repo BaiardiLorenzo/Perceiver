@@ -36,6 +36,7 @@ def fourier_encode(x: Tensor, max_freq: int, num_bands: int) -> Tensor:
 
 
 def positional_encoding(x: Tensor, dims: list, batch_size: int, max_freq: int, num_bands: int) -> Tensor:
+    # FIXME: Change the permutation of the tensor
     # Create a list of positions for each axis
     """
     xd is the value of the input position along the dth dimension (e.g. for images d = 2 and for video d = 3). 

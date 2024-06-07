@@ -180,19 +180,19 @@ class PerceiverBlock(nn.Module):
 
 
 class Classifier(nn.Module):
-    def __init__(self, dim: int, num_classes: int):
+    def __init__(self, emb_dim: int, num_classes: int):
         """
         Classifier
 
-        :param dim:
+        :param emb_dim:
         :param num_classes:
         """
         super().__init__()
-        self.dim = dim
+        self.emb_dim = emb_dim
         self.num_classes = num_classes
 
         # Classifier
-        self.classifier = nn.Linear(dim, num_classes)
+        self.classifier = nn.Linear(self.emb_dim, self.num_classes)
 
     def forward(self, x: Tensor) -> Tensor:
         """
