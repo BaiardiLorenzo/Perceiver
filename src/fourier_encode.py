@@ -35,7 +35,7 @@ def fourier_encode(x: Tensor, max_freq: int, num_bands: int) -> Tensor:
     return x
 
 
-def encoded_position(x: Tensor, dims: list, batch_size: int, max_freq: int, num_bands: int, dtype: torch.dtype) -> Tensor:
+def positional_encoding(x: Tensor, dims: list, batch_size: int, max_freq: int, num_bands: int) -> Tensor:
     # Create a list of positions for each axis
     """
     xd is the value of the input position along the dth dimension (e.g. for images d = 2 and for video d = 3). 
@@ -43,7 +43,7 @@ def encoded_position(x: Tensor, dims: list, batch_size: int, max_freq: int, num_
     """
     # Create a list of positions for each axis
     pos = torch.stack(list(torch.meshgrid(
-        *(torch.linspace(-1, 1, steps=size, dtype=dtype) for size in dims),
+        *(torch.linspace(-1, 1, steps=size, dtype=x.dtype) for size in dims),
         indexing="ij",
         )), dim=-1)
     
@@ -52,7 +52,7 @@ def encoded_position(x: Tensor, dims: list, batch_size: int, max_freq: int, num_
                         
     # Expand the encoded positions to match the shape of the input tensor
     # Tensor of shape (B, Channels, (Dimensions))
-    enc_pos = enc_pos.view(*enc_pos.shape[:-(len(dims))], -1)
+    enc_pos = enc_pos.view(*enc_pos.shape[:(len(dims))], -1)
     # Change the position of the final dimension to the first dimension of the tensor
     enc_pos = enc_pos.permute(-1, *range(len(enc_pos.shape) - 1))
     # Expand the tensor to match the shape of the input tensor
@@ -60,3 +60,4 @@ def encoded_position(x: Tensor, dims: list, batch_size: int, max_freq: int, num_
 
     # Concatenate the encoded positions to the input tensor
     x = torch.cat((x, enc_pos), dim=1)
+    return x

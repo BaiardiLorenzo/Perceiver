@@ -13,22 +13,26 @@ class TestFeedForwardBlock(unittest.TestCase):
         Test the dense block
         :return:
         """
-        batch_size = 32
-        channels = 3
-        height = 4
-        width = 5
-        m = height * width
+        B, M, C = 32, 20, 3
 
-        # Create a tensor of shape (B, C, M)
-        x = torch.rand((batch_size, channels, m))
+        # Create a tensor of shape (B, M, C)
+        x = torch.zeros((B, M, C))
 
         # Create a dense block
-        dense_block = DenseBlock(m)
+        dense_block = DenseBlock(C)
 
-        # Return a tensor of shape (B, C, M)
+        # Return a tensor of shape (B, M, C)
         y = dense_block(x)
 
-        self.assertEqual(y.shape, (batch_size, channels, m))
+        self.assertEqual(y.shape, (B, M, C))
+        
+        # Create a tensor of shape (M, B, C)
+        x = torch.zeros((M, B, C))
+
+        # Return a tensor of shape (M, B, C)
+        y = dense_block(x)
+
+        self.assertEqual(y.shape, (M, B, C))
 
 
 class TestAttentionBlock(unittest.TestCase):
@@ -38,79 +42,79 @@ class TestAttentionBlock(unittest.TestCase):
         Test the layer norm
         :return:
         """
-        batch_size = 32
-        channels = 3
-        n = 20
+        # [batch_size, channels, dim]
+        B, D, N = 32, 3, 20
 
         # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(batch_size, channels, n)
+        z = create_latent_array(B, D, N)
+
+        # Permute the tensor to shape (N, B, D)
+        z = z.permute(2, 0, 1)
 
         # Create a layer norm
-        layer_norm = nn.LayerNorm(n)
+        layer_norm = nn.LayerNorm(D)
 
-        # Return a tensor of shape (B, D, N)
+        # Return a tensor of shape (N, B, D)
         z = layer_norm(z)
 
-        self.assertEqual(z.shape, (batch_size, channels, n))
+        self.assertEqual(z.shape, (N, B, D))
+
 
     def test_latent_output_shape(self):
         """
         Test the attention block
         :return:
         """
-        batch_size = 32
-        channels = 16
-        latent_dim = 8
-        heads = 4
+        # [batch_size, channels, dim]
+        B, D, N = 32, 16, 8
+        heads = 8
 
         # Create a tensor of shape (B, D, N)
-        x = torch.rand((batch_size, channels, latent_dim))
+        x = torch.randn((B, D, N))
 
         # Change the shape of tensors (N, B, D)
         x = x.permute(2, 0, 1)
 
         # Create an attention block
-        attention_block = AttentionBlock(channels, channels, heads)
+        attention_block = AttentionBlock(D, D, heads=heads)
 
-        # Return a tensor of shape (B, D, N)
+        # Return a tensor of shape (N, B, D)
         y = attention_block(x, x)
 
-        # Change the shape of tensors (B, D, N)
-        y = y.permute(1, 2, 0)
-
-        self.assertEqual(y.shape, (batch_size, channels, latent_dim))
+        self.assertEqual(y.shape, (N, B, D))
 
     def test_create_cross_attention(self):
         """
         Test for the creation of the attention block
         :return:
         """
-        B, C, H, W = 32, 3, 4, 5
-        M = H * W
-        heads = 1
+        # [batch_size, channels, dim]
+        B, C, M = 32, 3, 20
 
-        D = 2  # Channel dimension for the latent tensor
-        N = 8  # Latent dimension
+        # [batch_size, channels, dim]
+        D, N = 2, 8
 
-        # Create a tensor of shape (B, C, M)
-        x = torch.zeros((B, C, M))
+        # Create a tensor of shape (M, B, C)
+        x = torch.zeros((M, B, C))
 
         # Create a latent tensor of shape (B, D, N)
         z = create_latent_array(B, D, N)
 
+        # Permute the tensor to shape (N, B, D)
+        z = z.permute(2, 0, 1)
+
         # Normalization before the cross attention
-        latent_norm = nn.LayerNorm(N)
-        input_norm = nn.LayerNorm(M)
+        latent_norm = nn.LayerNorm(D)
+        input_norm = nn.LayerNorm(C)
 
         # Cross attention
         attention = nn.MultiheadAttention(
-            N,
+            D,  # Embedding dimension
             1,
-            kdim=M,
-            vdim=M,
+            kdim=C,
+            vdim=C,
             dropout=0.0,
             bias=False,
-            batch_first=True
         )
         
         x = input_norm(x)
@@ -122,9 +126,9 @@ class TestAttentionBlock(unittest.TestCase):
         # Add residual connection
         res = a + z
 
-        self.assertEqual(res.shape, (B, D, N))
+        self.assertEqual(res.shape, (N, B, D))
 
-        dense = DenseBlock(N)
+        dense = DenseBlock(D)
 
         # Compute dense layer
         out = dense(res)
@@ -132,7 +136,7 @@ class TestAttentionBlock(unittest.TestCase):
         # Add residual connection
         out = out + res
 
-        self.assertEqual(out.shape, (B, D, N))
+        self.assertEqual(out.shape, (N, B, D))
 
     
     def test_attention_block(self):
@@ -140,25 +144,28 @@ class TestAttentionBlock(unittest.TestCase):
         Test the attention block
         :return:
         """
-        B, C, H, W = 32, 3, 4, 5
-        M = H * W
+        # [batch_size, channels, dim]
+        B, C, M = 32, 64, 20
 
-        D = 2  # Channel dimension for the latent tensor
-        N = 8  # Latent dimension
+        # [batch_size, channels, dim]
+        D, N = 8, 8  
 
-        # Create a tensor of shape (B, C, M)
-        x = torch.zeros((B, C, M))
+        # Create a tensor of shape (M, B, C)
+        x = torch.zeros((M, B, C))
 
         # Create a latent tensor of shape (B, D, N)
         z = create_latent_array(B, D, N)
 
-        # Create an attention block
-        attention_block = AttentionBlock(N, M, heads=1)
+        # Permute the tensor to shape (N, B, D)
+        z = z.permute(2, 0, 1)
 
-        # Return a tensor of shape (B, D, N)
+        # Create an attention block
+        attention_block = AttentionBlock(D, C, heads=8)
+
+        # Return a tensor of shape (N, B, D)
         y = attention_block(x, z)
 
-        self.assertEqual(y.shape, (B, D, N))
+        self.assertEqual(y.shape, (N, B, D))
 
     
     def test_latent_block(self):
@@ -166,22 +173,27 @@ class TestAttentionBlock(unittest.TestCase):
         Test the latent block
         :return:
         """
-        B, D, N = 32, 2, 8
+        # [batch_size, channels, dim]
+        B, D, N = 32, 8, 64
 
         # Create a latent tensor of shape (B, D, N)
         z = create_latent_array(B, D, N)
 
+        # Permute the tensor to shape (N, B, D)
+        z = z.permute(2, 0, 1)
+
         # Normalize the latent tensor
-        latent_norm = nn.LayerNorm(N)
+        latent_norm = nn.LayerNorm(D)
+
         z = latent_norm(z)
 
         # Create a attention block
-        attention_block = LatentBlock(N, heads=1, latent_blocks=6)
+        attention_block = LatentBlock(D, heads=8, latent_blocks=6)
 
-        # Return a tensor of shape (B, D, N)
+        # Return a tensor of shape (N, B, D)
         y = attention_block(z)
 
-        self.assertEqual(y.shape, (B, D, N))
+        self.assertEqual(y.shape, (N, B, D))
 
     
     def test_perceiver_block(self):
@@ -189,25 +201,28 @@ class TestAttentionBlock(unittest.TestCase):
         Test the Perciever block: Cross-attention and Latent transformer
         :return:
         """
-        B, C, H, W = 32, 3, 4, 5
-        M = H * W
+        # [batch_size, channels, dim]
+        B, C, M = 32, 8, 20
 
-        D = 2  # Channel dimension for the latent tensor
-        N = 8  # Latent dimension
+        # [batch_size, channels, dim]
+        D, N = 8, 8 
 
-        # Create a tensor of shape (B, C, M)
-        x = torch.zeros((B, C, M))
+        # Create a tensor of shape (M, B, C)
+        x = torch.zeros((M, B, C))
 
         # Create a latent tensor of shape (B, D, N)
         z = create_latent_array(B, D, N)
 
-        # Create a perceiver block
-        perceiver_block = PerceiverBlock(N, M, heads=8, latent_blocks=6)
+        # Permute the tensor to shape (N, B, D)
+        z = z.permute(2, 0, 1)
 
-        # Return a tensor of shape (B, D, N)
+        # Create a perceiver block
+        perceiver_block = PerceiverBlock(D, C, heads=8, latent_blocks=6)
+
+        # Return a tensor of shape (N, B, D)
         y = perceiver_block(x, z)
 
-        self.assertEqual(y.shape, (B, D, N))
+        self.assertEqual(y.shape, (N, B, D))
 
 
 

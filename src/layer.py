@@ -44,12 +44,11 @@ class DenseBlock(nn.Module):
 class AttentionBlock(nn.Module):
     def __init__(self, emb_dim: int, input_dim: int, heads: int, dropout: float = 0.0):
         """
-        @TODO Rewrite MultiHeadAttention separately?
+        TODO Rewrite MultiHeadAttention separately?
         Attention block:
         - Normalize the input
         - Normalize the latent tensor
         - Apply cross attention
-        - @FIXME Project the output of the cross attention
         - Apply dense layer
 
         In the cross-attention module, inputs are first processed with layer norm (Ba et al., 2016)
@@ -79,13 +78,12 @@ class AttentionBlock(nn.Module):
 
         # Cross attention
         self.attention = nn.MultiheadAttention(
-            self.emb_dim,
+            self.emb_dim, 
             self.num_heads,
             kdim=self.input_dim,
             vdim=self.input_dim,
             dropout=self.dropout,
             bias=False,
-            batch_first=True
         )
 
         # Dense layer
@@ -120,6 +118,11 @@ class LatentBlock(nn.Module):
     def __init__(self, emb_dim: int, heads: int, latent_blocks: int, dropout: float = 0.0):
         """
         Latent block
+
+        :param emb_dim:
+        :param heads:
+        :param latent_blocks:
+        :param dropout:
         """
         super().__init__()
         self.emb_dim = emb_dim
