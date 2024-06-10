@@ -89,20 +89,24 @@ class AttentionBlock(nn.Module):
         # Dense layer
         self.dense = DenseBlock(emb_dim, dropout=dropout)
 
-    def forward(self, x: Tensor, z: Tensor) -> Tensor:
+    def forward(self, x: Tensor, z: Tensor, key_mask: Tensor = None) -> Tensor:
         """
         Forward pass
 
         :param x: input tensor
         :param z: input/latent tensor
+        :param key_mask: key padding mask for the unbatched input tensor
         :return:
         """
         # Normalize the input
         x_norm = self.input_norm(x)
         z_norm = self.latent_norm(z)
 
+        # print(x_norm.shape, z_norm.shape)
+        # print(key_mask.shape)
+
         # Compute the cross attention
-        a, _ = self.attention(query=z_norm, key=x_norm, value=x_norm)
+        a, _ = self.attention(query=z_norm, key=x_norm, value=x_norm, key_padding_mask=key_mask)
 
         # Add residual connection
         res = a + z
@@ -166,15 +170,16 @@ class PerceiverBlock(nn.Module):
         # Latent transformer
         self.latent_transform = LatentBlock(self.emb_dim, self.heads, self.latent_blocks, dropout=self.dropout)
 
-    def forward(self, x: Tensor, z: Tensor) -> Tensor:
+    def forward(self, x: Tensor, z: Tensor, key_mask: Tensor = None) -> Tensor:
         """
         Forward pass
 
         :param x: input tensor
         :param z: latent tensor
+        :param mask: key padding mask for the unbatched input tensor
         :return:
         """
-        z = self.cross_attention(x, z)
+        z = self.cross_attention(x, z, key_mask)
         z = self.latent_transform(z)
         return z
 

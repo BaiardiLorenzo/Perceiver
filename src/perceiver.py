@@ -68,8 +68,8 @@ class Perceiver(nn.Module):
         # Classifier
         self.classifier = Classifier(self.emb_dim, self.num_classes)
 
-    def forward(self, x: Tensor):
-        _, _, *dims = x.shape
+    def forward(self, x: Tensor, key_mask: Tensor = None) -> Tensor:
+        _, *dims, _ = x.shape
 
         # Positional encoding
         if self.fourier_encode:
@@ -78,13 +78,13 @@ class Perceiver(nn.Module):
         # Flatten the input tensor
         x = x.view(x.shape[0], x.shape[1], -1)
 
-        # Permute the input tensor to the shape (M, B, INPUT_DIM)
-        xx = x.permute(2, 0, 1)
+        # Change the shape of the input tensor to (M, Batch, Input_dim)
+        x = x.permute(1, 0, 2)
 
         # Compute the perceiver block sharing the weights of the model
         for _ in range(self.depth):
-            x = self.layers(xx, self.latent)    
+            xx = self.layers(x, self.latent, key_mask=key_mask)    
 
         # Classifier
-        x = self.classifier(x)
-        return x
+        xx = self.classifier(xx)
+        return xx

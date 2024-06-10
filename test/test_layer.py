@@ -83,6 +83,7 @@ class TestAttentionBlock(unittest.TestCase):
 
         self.assertEqual(y.shape, (N, B, D))
 
+
     def test_create_cross_attention(self):
         """
         Test for the creation of the attention block
@@ -138,7 +139,7 @@ class TestAttentionBlock(unittest.TestCase):
 
         self.assertEqual(out.shape, (N, B, D))
 
-    
+
     def test_attention_block(self):
         """
         Test the attention block

@@ -1,2 +1,4 @@
 dataset/*
 src/__pycache__/*
+train/__pycache__/*
+wandb/*

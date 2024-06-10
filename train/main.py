@@ -1,17 +1,25 @@
+import datetime
 import torch
 import wandb
 import torch.nn as nn
-from tqdm import tqdm
+import numpy as np
 
-from src.perceiver import Perceiver
-from lamb import LAMB
-from torch.utils.data import DataLoader
-
+from torch import optim
+from torch.nn import functional as F
+from sklearn.metrics import accuracy_score, classification_report
 from torch_geometric.datasets import ModelNet
+from torch_geometric.loader import DataLoader
+from torch_geometric.utils import to_dense_batch
+from tqdm import tqdm
+from datetime import datetime
+
+from lamb import Lamb
+from src.perceiver import Perceiver
 
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cpu")
     print(f'Using device: {device}')
 
     """
@@ -35,31 +43,28 @@ def main():
     test_dataset = ModelNet(root="./dataset", name="40", train=False)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    wandb.init(
-        project="Perceiver",
-        name="Train Model",
-        # entity=,
-        id="",
-        notes="",
-        tags=[]
-    )
+    input_dim = 3
+    len_shape = 1
+    emb_dim = 512
+    latent_dim = 512
+    num_classes = 40
 
-    depth = 2
-    latent_block = 6
-    max_freq = 1120
-    num_bands = 64
+    depth = 2  
+    latent_block = 6  
+    max_freq = 1120  
+    num_bands = 64 
     epochs = 120
     lr = 1e-3
 
     model = Perceiver(
-        input_dim=3,
-        len_shape=1024,
-        emb_dim=512,
-        latent_dim=512,
+        input_dim=input_dim,
+        len_shape=len_shape,
+        emb_dim=emb_dim,  # 512
+        latent_dim=latent_dim,  # 512
         batch_size=batch_size,
-        num_classes=40,
+        num_classes=num_classes,
         depth=depth,
         latent_blocks=latent_block,
         heads=8,
@@ -68,41 +73,108 @@ def main():
         num_bands=num_bands
     ).to(device)
 
-    optimizer = LAMB(params=model.parameters(), lr=lr)
-    # loss = nn.CrossEntropyLoss()
+    optimizer = Lamb(params=model.parameters(), lr=lr)
 
+    wandb.init(
+        project="Deep Learning Exam",
+        name="Perceiver: "+datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        # Track hyperparameters and run metadata
+        config={
+            "architecture": "Perceiver",
+            "dataset": "ModelNet40",
+            "depth": depth,
+            "latent_blocks": latent_block,
+            "max_freq": max_freq,
+            "num_bands": num_bands,
+            "epochs": epochs,
+            "lr": lr,
+            "batch_size": batch_size,
+            "optimizer": "Lamb",
+            "device": device.type
+        }
+    )
+    wandb.watch(model, nn.CrossEntropyLoss(), log="all")
+
+    losses_accs = []
+    class_reports = []
     for epoch in range(epochs):
-        train_epoch(model, train_dataloader, optimizer, epoch, device)
-        evaluate_epoch(model, test_dataloader, epoch, device)
+        loss = train_epoch(model, train_dataloader, optimizer, epoch, device = device)
+        (val_acc, class_rep) = evaluate_epoch(model, test_dataloader, epoch, device = device)
+        losses_accs.append((loss, val_acc))
+        class_reports.append(class_rep)
 
+        wandb.log({"epoch": epoch, "loss": loss, "val_acc": val_acc, "class_report": class_rep})
+        print(f"Epoch {epoch}: Loss: {loss:.4f}, Val Acc: {val_acc:.4f}")
+
+    wandb.unwatch(model)
     wandb.finish()
 
 
-def train_epoch(model, data, loss, optimizer, scheduler, epoch, device):
+def train_epoch(model, data, opt, epoch, scheduler = None, device="cuda"):
     model.train()
+    losses = []
 
-    for batch in tqdm(data, desc=f"Epoch {epoch}"):
-        optimizer.zero_grad()
+    for (i, batch) in enumerate(tqdm(data, desc=f"Training epoch {epoch}", leave=True)):
+        xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
+        xs, mask = xs.to(device), mask.to(device)
+        ys = batch.y.to(device)
 
-        x = batch.to(device)
-        y = model(x)
+        # Zero out the gradients
+        opt.zero_grad()
 
+        # Forward pass
+        logits = model(xs, mask)
+
+        # Compute the cross entropy loss
+        loss = F.cross_entropy(logits, ys)
+
+        # Backward pass
         loss.backward()
 
-        optimizer.step()
-        scheduler.step()
+        # Update the model parameters
+        opt.step()
 
-        wandb.log({"loss": loss.item()})
+        # Update the learning rate if a scheduler is provided
+        if scheduler is not None:
+            scheduler.step()
 
-def evaluate_epoch(model, data, loss, epoch, device):
+        # Log the loss
+        losses.append(loss.item())
+
+    # Return the average loss
+    return np.mean(losses)
+
+
+def evaluate_epoch(model, data, epoch, device="cuda"):
     model.eval()
+    preds = []
+    targets = []
 
-    for batch in tqdm(data, desc=f"Epoch {epoch}"):
-        x = batch.to(device)
-        y = model(x)
+    # Disable gradient computation for evaluation
+    with torch.no_grad():
+        for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating epoch {epoch}", leave=False)):
+            xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
+            xs, mask = xs.to(device), mask.to(device)
+            ys = batch.y.to(device)
 
-        wandb.log({"loss": loss.item()})
-    
+            # Forward pass
+            logits = model(xs, mask)
+
+            # Get the predicted classes
+            pred = logits.argmax(dim=-1)
+
+            # Append the predictions and targets
+            preds.append(pred)
+            targets.append(ys.detach().cpu().numpy())
+        
+    # Concatenate the predictions and targets
+    preds = np.hstack(preds)
+    targets = np.hstack(targets)
+
+    # Compute the accuracy
+    accuracy = accuracy_score(targets, preds)
+    class_report = classification_report(targets, preds, zero_division=0, digits=3, output_dict=True)
+    return accuracy, class_report
 
 
 if __name__ == '__main__':

@@ -50,15 +50,16 @@ def positional_encoding(x: Tensor, dims: list, batch_size: int, max_freq: int, n
     
     # Encode the positions with a fourier feature encoding
     enc_pos = fourier_encode(pos, max_freq, num_bands)
-                        
+
     # Expand the encoded positions to match the shape of the input tensor
-    # Tensor of shape (B, Channels, (Dimensions))
+    # Tensor of shape (M, Channels * (Dimensions))
     enc_pos = enc_pos.view(*enc_pos.shape[:(len(dims))], -1)
-    # Change the position of the final dimension to the first dimension of the tensor
-    enc_pos = enc_pos.permute(-1, *range(len(enc_pos.shape) - 1))
+
     # Expand the tensor to match the shape of the input tensor
     enc_pos = enc_pos.unsqueeze(0).expand(batch_size, *enc_pos.shape)
+    # Change the device of the tensor
+    enc_pos = enc_pos.to(x.device)
 
     # Concatenate the encoded positions to the input tensor
-    x = torch.cat((x, enc_pos), dim=1)
+    x = torch.cat((x, enc_pos), dim=-1)
     return x
