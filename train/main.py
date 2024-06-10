@@ -125,6 +125,8 @@ def train_epoch(model, data, opt, epoch, scheduler = None, device="cuda"):
         # Forward pass
         logits = model(xs, mask)
 
+        # print(logits.shape, ys.shape)
+
         # Compute the cross entropy loss
         loss = F.cross_entropy(logits, ys)
 

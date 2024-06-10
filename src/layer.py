@@ -197,7 +197,8 @@ class Classifier(nn.Module):
         self.num_classes = num_classes
 
         # Classifier
-        self.classifier = nn.Linear(self.emb_dim, self.num_classes)
+        self.fc1 = nn.Linear(self.emb_dim, self.emb_dim)
+        self.fc2 = nn.Linear(self.emb_dim, self.num_classes)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -206,4 +207,7 @@ class Classifier(nn.Module):
         :param x:
         :return:
         """
-        return self.classifier(x)
+        x = self.fc1(x)
+        x = x.mean(dim=0)
+        x = self.fc2(x)
+        return x
