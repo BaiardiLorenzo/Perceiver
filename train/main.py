@@ -1,4 +1,5 @@
 import datetime
+from matplotlib.pyplot import step
 import torch
 import wandb
 import torch.nn as nn
@@ -9,6 +10,7 @@ from torch.nn import functional as F
 from sklearn.metrics import accuracy_score, classification_report
 from torch_geometric.datasets import ModelNet
 from torch_geometric.loader import DataLoader
+import torch_geometric.transforms as T
 from torch_geometric.utils import to_dense_batch
 from tqdm import tqdm
 from datetime import datetime
@@ -18,8 +20,7 @@ from src.perceiver import Perceiver
 
 
 def main():
-    # device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
-    device = torch.device("cpu")
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
     """
@@ -36,34 +37,35 @@ def main():
     els saturated in performance within 50,000 training steps
     """
 
-    batch_size = 64  # 512 
+    batch_size = 32  # 64/512 
+
+    pre_transform, transform = T.NormalizeScale(), T.SamplePoints(2000)
 
     # Training and test datasets
-    train_dataset = ModelNet(root="./dataset", name="40", train=True)
-    test_dataset = ModelNet(root="./dataset", name="40", train=False)
+    train_dataset = ModelNet(root="./dataset", name="40", train=True, transform=transform, pre_transform=pre_transform)
+    test_dataset = ModelNet(root="./dataset", name="40", train=False, transform=transform, pre_transform=pre_transform)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     input_dim = 3
     len_shape = 1
-    emb_dim = 512
-    latent_dim = 512
+    emb_dim = 512  # 512
+    latent_dim = 512  # 512
     num_classes = 40
 
-    depth = 2  
-    latent_block = 6  
-    max_freq = 1120  
-    num_bands = 64 
-    epochs = 120
+    depth = 2  # 2  
+    latent_block = 6 # 6  
+    max_freq = 1120  # 1120  
+    num_bands = 64  # 64 
+    epochs = 50  # 120
     lr = 1e-3
 
     model = Perceiver(
         input_dim=input_dim,
         len_shape=len_shape,
-        emb_dim=emb_dim,  # 512
-        latent_dim=latent_dim,  # 512
-        batch_size=batch_size,
+        emb_dim=emb_dim,
+        latent_dim=latent_dim,
         num_classes=num_classes,
         depth=depth,
         latent_blocks=latent_block,
@@ -103,33 +105,36 @@ def main():
         losses_accs.append((loss, val_acc))
         class_reports.append(class_rep)
 
-        wandb.log({"epoch": epoch, "loss": loss, "val_acc": val_acc, "class_report": class_rep})
+        wandb.log({"train/epoch": epoch, "train/loss": loss}, step=epoch)
+        wandb.log({"val/epoch": epoch, "val/accuracy": val_acc, "classification_report/classification_report": class_rep}, step=epoch)
         print(f"Epoch {epoch}: Loss: {loss:.4f}, Val Acc: {val_acc:.4f}")
+        break
 
     wandb.unwatch(model)
     wandb.finish()
 
 
-def train_epoch(model, data, opt, epoch, scheduler = None, device="cuda"):
+def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
     model.train()
     losses = []
 
     for (i, batch) in enumerate(tqdm(data, desc=f"Training epoch {epoch}", leave=True)):
-        xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
-        xs, mask = xs.to(device), mask.to(device)
+        xs, _ = to_dense_batch(batch.pos, batch=batch.batch)
+        xs = xs.to(device)
         ys = batch.y.to(device)
 
         # Zero out the gradients
         opt.zero_grad()
 
         # Forward pass
-        logits = model(xs, mask)
+        logits = model(xs)
 
-        # print(logits.shape, ys.shape)
+        print(f"Logits: {logits.shape}, ys: {ys.shape}")
+        print(f"Logits: {logits}, ys: {ys}")
 
         # Compute the cross entropy loss
         loss = F.cross_entropy(logits, ys)
-
+        
         # Backward pass
         loss.backward()
 
@@ -154,10 +159,10 @@ def evaluate_epoch(model, data, epoch, device="cuda"):
 
     # Disable gradient computation for evaluation
     with torch.no_grad():
-        for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating epoch {epoch}", leave=False)):
+        for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating epoch {epoch}", leave=True)):
             xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
             xs, mask = xs.to(device), mask.to(device)
-            ys = batch.y.to(device)
+            ys = batch.y
 
             # Forward pass
             logits = model(xs, mask)
@@ -166,8 +171,8 @@ def evaluate_epoch(model, data, epoch, device="cuda"):
             pred = logits.argmax(dim=-1)
 
             # Append the predictions and targets
-            preds.append(pred)
-            targets.append(ys.detach().cpu().numpy())
+            preds.append(pred.cpu().data.numpy())
+            targets.append(ys)
         
     # Concatenate the predictions and targets
     preds = np.hstack(preds)

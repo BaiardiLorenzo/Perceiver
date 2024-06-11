@@ -4,20 +4,20 @@ from torch import nn
 
 def create_latent_array(
         latent_dim: int,
-        batch_size: int,
         emb_dim: int,
+        batch_size: int = 1,
         mean: float = 0,
         std: float = 0.02,
         a: float = -2,
         b: float = 2) -> nn.Parameter:
     """
-    Create a latent array of shape (latent_dim, batch_size, emb_dim) for the Perceiver model.
+    Create a latent array of shape [latent_dim, batch_size, emb_dim] for the Perceiver model.
 
     The latent array is randomly initialized using a truncated normal distribution with
     mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
 
     :param latent_dim: N
-    :param batch_size: B
+    :param batch_size: B (default value is 1)
     :param emb_dim: D
     :param mean: default value is 0
     :param std: default value is 0.02
@@ -30,7 +30,8 @@ def create_latent_array(
             torch.zeros(latent_dim, batch_size, emb_dim),
             mean=mean,
             std=std,
-            a=a, b=b
+            a=a,
+            b=b
         )
     )
 

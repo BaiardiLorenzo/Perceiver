@@ -3,120 +3,108 @@ import torch
 from torch import nn, Tensor
 
 from src.embedding import create_latent_array
-from src.layer import DenseBlock, AttentionBlock, LatentBlock, PerceiverBlock
+from src.layer import DenseBlock, AttentionBlock, LatentTransformerBlock, PerceiverBlock
 
 
-class TestFeedForwardBlock(unittest.TestCase):
+class DenseBlockTest(unittest.TestCase):
 
-    def test_output_shape(self):
+    def test_dense_block(self):
         """
-        Test the dense block
-        :return:
+        Test the dense block layer
+
+        :return: tensor of correct shape and values
         """
-        B, M, C = 32, 20, 3
+        # [Length, Batch, Channels]
+        M, B, C = 20, 32, 3
 
-        # Create a tensor of shape (B, M, C)
-        x = torch.zeros((B, M, C))
-
+        # ------------------------------------------------
         # Create a dense block
         dense_block = DenseBlock(C)
 
-        # Return a tensor of shape (B, M, C)
-        y = dense_block(x)
-
-        self.assertEqual(y.shape, (B, M, C))
+        # Create a tensor of shape [Length, Batch, Channels]
+        x = torch.randn((M, B, C))
         
-        # Create a tensor of shape (M, B, C)
-        x = torch.zeros((M, B, C))
-
-        # Return a tensor of shape (M, B, C)
         y = dense_block(x)
 
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(y.shape, (M, B, C))
 
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(x != 0))
+        self.assertFalse(torch.any(torch.isnan(x)))
+        
+        # ------------------------------------------------
+        # Create a dense block
+        dense_block = DenseBlock(C)
 
-class TestAttentionBlock(unittest.TestCase):
+        # Create a tensor of shape [Batch, Length, Channels]
+        x = torch.randn((B, M, C))
 
-    def test_layer_norm_output_shape(self):
+        y = dense_block(x)
+
+        # Return a tensor of shape [Batch, Length, Channels]
+        self.assertEqual(y.shape, (B, M, C))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(y != 0))
+        self.assertFalse(torch.any(torch.isnan(y)))
+
+
+class AttentionBlockTest(unittest.TestCase):
+
+    def test_layer_norm(self):
         """
         Test the layer norm
-        :return:
+
+        :return: tensor of correct shape and values
         """
-        # [batch_size, channels, dim]
-        B, D, N = 32, 3, 20
+        # [Length, Batch, Channels]
+        N, B, D = 20, 32, 3
 
-        # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(B, D, N)
-
-        # Permute the tensor to shape (N, B, D)
-        z = z.permute(2, 0, 1)
-
+        # ------------------------------------------------
         # Create a layer norm
         layer_norm = nn.LayerNorm(D)
 
-        # Return a tensor of shape (N, B, D)
-        z = layer_norm(z)
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
 
-        self.assertEqual(z.shape, (N, B, D))
+        y = layer_norm(z)
 
-
-    def test_latent_output_shape(self):
-        """
-        Test the attention block
-        :return:
-        """
-        # [batch_size, channels, dim]
-        B, D, N = 32, 16, 8
-        heads = 8
-
-        # Create a tensor of shape (B, D, N)
-        x = torch.randn((B, D, N))
-
-        # Change the shape of tensors (N, B, D)
-        x = x.permute(2, 0, 1)
-
-        # Create an attention block
-        attention_block = AttentionBlock(D, D, heads=heads)
-
-        # Return a tensor of shape (N, B, D)
-        y = attention_block(x, x)
-
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(y.shape, (N, B, D))
 
 
     def test_create_cross_attention(self):
         """
         Test for the creation of the attention block
-        :return:
+
+        :return: tensor of correct shape and values
         """
-        # [batch_size, channels, dim]
-        B, C, M = 32, 3, 20
+        # [Length, Batch, Channels]
+        M, B, C = 20, 32, 3
+        D, N = 8, 8
 
-        # [batch_size, channels, dim]
-        D, N = 2, 8
-
-        # Create a tensor of shape (M, B, C)
-        x = torch.zeros((M, B, C))
-
-        # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(B, D, N)
-
-        # Permute the tensor to shape (N, B, D)
-        z = z.permute(2, 0, 1)
-
+        # ------------------------------------------------
         # Normalization before the cross attention
         latent_norm = nn.LayerNorm(D)
         input_norm = nn.LayerNorm(C)
 
         # Cross attention
         attention = nn.MultiheadAttention(
-            D,  # Embedding dimension
-            1,
+            embed_dim=D,  
+            num_heads=1,
             kdim=C,
-            vdim=C,
-            dropout=0.0,
-            bias=False,
+            vdim=C
         )
+
+        # Dense block
+        dense = DenseBlock(D)
+
+        # Create a tensor of shape [Length, Batch, Channels]
+        x = torch.randn((M, B, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
         
         x = input_norm(x)
         z = latent_norm(z)
@@ -124,12 +112,15 @@ class TestAttentionBlock(unittest.TestCase):
         # Compute the cross attention
         a, _ = attention(query=z, key=x, value=x)
 
+        # Return a tensor of shape [Length, Batch, Channels]
+        self.assertEqual(a.shape, (N, B, D))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(a != 0))
+        self.assertFalse(torch.any(torch.isnan(a)))
+
         # Add residual connection
         res = a + z
-
-        self.assertEqual(res.shape, (N, B, D))
-
-        dense = DenseBlock(D)
 
         # Compute dense layer
         out = dense(res)
@@ -137,94 +128,199 @@ class TestAttentionBlock(unittest.TestCase):
         # Add residual connection
         out = out + res
 
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(out.shape, (N, B, D))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(out != 0))
+        self.assertFalse(torch.any(torch.isnan(out)))
+
+        # ------------------------------------------------
+        # Normalization before the cross attention
+        latent_norm = nn.LayerNorm(D)
+        input_norm = nn.LayerNorm(C)
+
+        # Cross attention
+        attention = nn.MultiheadAttention(
+            embed_dim=D,  
+            num_heads=1,
+            kdim=C,
+            vdim=C,
+            batch_first=True
+        )
+
+        # Dense block
+        dense = DenseBlock(D)
+
+        # Create a tensor of shape [Batch, Length, Channels]
+        x = torch.randn((B, M, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
+
+        # Permute latent tensor to shape [Batch, Length, Channels]
+        z = z.permute(1, 0, 2)
+
+        x = input_norm(x)
+        z = latent_norm(z)
+
+        # Compute the cross attention
+        a, _ = attention(query=z, key=x, value=x)
+
+        # Return a tensor of shape [Batch, Length, Channels]
+        self.assertEqual(a.shape, (B, N, D))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(a != 0))
+        self.assertFalse(torch.any(torch.isnan(a)))
+
+        # Add residual connection
+        res = a + z
+
+        # Compute dense layer
+        out = dense(res)
+
+        # Add residual connection
+        out = out + res
+
+        # Return a tensor of shape [Batch, Length, Channels]
+        self.assertEqual(out.shape, (B, N, D))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(out != 0))
+        self.assertFalse(torch.any(torch.isnan(out)))
 
 
     def test_attention_block(self):
         """
         Test the attention block
-        :return:
+
+        :return: tensor of correct shape and values
         """
-        # [batch_size, channels, dim]
-        B, C, M = 32, 64, 20
+        # [Length, Batch, Channels]
+        M, B, C = 20, 32, 3
+        N, B, D = 64, 32, 16
 
-        # [batch_size, channels, dim]
-        D, N = 8, 8  
-
-        # Create a tensor of shape (M, B, C)
-        x = torch.zeros((M, B, C))
-
-        # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(B, D, N)
-
-        # Permute the tensor to shape (N, B, D)
-        z = z.permute(2, 0, 1)
-
+        # ------------------------------------------------
         # Create an attention block
-        attention_block = AttentionBlock(D, C, heads=8)
+        attention_block = AttentionBlock(
+            emb_dim=D, 
+            input_dim=C
+        )
 
-        # Return a tensor of shape (N, B, D)
+        # Create a tensor of shape [Length, Batch, Channels]
+        x = torch.randn((M, B, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
+
         y = attention_block(x, z)
 
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(y.shape, (N, B, D))
 
-    
-    def test_latent_block(self):
+        # Assert that the values of the input tensor are not all zeros or NaN
+        self.assertTrue(torch.any(y != 0))
+        self.assertFalse(torch.any(torch.isnan(y)))
+
+        # ------------------------------------------------
+        # TODO Add the batch_first parameter to the attention block
+
+        # Create an attention block
+        # attention_block = AttentionBlock(D, C)
+
+        # Create a tensor of shape [Batch, Length, Channels]
+        # x = torch.randn((B, M, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        # z = create_latent_array(N, D, B)
+
+        # Permute latent tensor to shape [Batch, Length, Channels]
+        # z = z.permute(1, 0, 2)
+
+        # y = attention_block(x, z)
+
+        # Return a tensor of shape [Batch, Length, Channels]
+        # self.assertEqual(y.shape, (B, M, C))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        # self.assertTrue(torch.any(x != 0))
+        # self.assertFalse(torch.any(torch.isnan(x)))
+
+
+class LatentTransformerBlockTest(unittest.TestCase):
+
+    def test_latent_transformer(self):
         """
-        Test the latent block
-        :return:
+        Test the latent transformer
+
+        :return: tensor of correct shape and values
         """
-        # [batch_size, channels, dim]
-        B, D, N = 32, 8, 64
-
-        # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(B, D, N)
-
-        # Permute the tensor to shape (N, B, D)
-        z = z.permute(2, 0, 1)
-
-        # Normalize the latent tensor
-        latent_norm = nn.LayerNorm(D)
-
-        z = latent_norm(z)
+        # [Length, Batch, Channels]
+        N, B, D = 64, 32, 16
+        
+        heads = 8
+        latent_blocks = 6
 
         # Create a attention block
-        attention_block = LatentBlock(D, heads=8, latent_blocks=6)
+        latent_transformer = LatentTransformerBlock(
+            emb_dim=D, 
+            heads=heads, 
+            latent_blocks=latent_blocks
+        )
 
-        # Return a tensor of shape (N, B, D)
-        y = attention_block(z)
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
+        
+        y = latent_transformer(z)
 
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(y.shape, (N, B, D))
 
+        # Assert that the values of the input tensor are not all zeros or NaN
+        # print(f"Result: {y}")
+        self.assertTrue(torch.any(y != 0))
+        self.assertFalse(torch.any(torch.isnan(y)))
+
     
+class PerceiverBlockTest(unittest.TestCase):
+
     def test_perceiver_block(self):
         """
         Test the Perciever block: Cross-attention and Latent transformer
-        :return:
+
+        :return: tensor of correct shape and values
         """
-        # [batch_size, channels, dim]
-        B, C, M = 32, 8, 20
+        # [Length, Batch, Channels]
+        M, B, C = 20, 32, 3
+        N, D = 8, 8 
 
-        # [batch_size, channels, dim]
-        D, N = 8, 8 
-
-        # Create a tensor of shape (M, B, C)
-        x = torch.zeros((M, B, C))
-
-        # Create a latent tensor of shape (B, D, N)
-        z = create_latent_array(B, D, N)
-
-        # Permute the tensor to shape (N, B, D)
-        z = z.permute(2, 0, 1)
+        heads = 8
+        latent_blocks = 6
 
         # Create a perceiver block
-        perceiver_block = PerceiverBlock(D, C, heads=8, latent_blocks=6)
+        perceiver_block = PerceiverBlock(
+            emb_dim=D, 
+            input_dim=C, 
+            heads=heads, 
+            latent_blocks=latent_blocks
+        )
 
-        # Return a tensor of shape (N, B, D)
+        # Create a tensor of shape [Length, Batch, Channels]
+        x = torch.randn((M, B, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
+        
         y = perceiver_block(x, z)
 
+        # Return a tensor of shape [Length, Batch, Channels]
         self.assertEqual(y.shape, (N, B, D))
 
+        # Assert that the values of the input tensor are not all zeros or NaN
+        # print(f"Result: {y}")
+        self.assertTrue(torch.any(y != 0))
+        self.assertFalse(torch.any(torch.isnan(y)))
 
 
 if __name__ == '__main__':
