@@ -101,14 +101,13 @@ def main():
     class_reports = []
     for epoch in range(epochs):
         loss = train_epoch(model, train_dataloader, optimizer, epoch, device = device)
-        (val_acc, class_rep) = evaluate_epoch(model, test_dataloader, epoch, device = device)
+        (val_acc, class_rep, val_loss) = evaluate_epoch(model, test_dataloader, device = device)
         losses_accs.append((loss, val_acc))
         class_reports.append(class_rep)
 
         wandb.log({"train/epoch": epoch, "train/loss": loss}, step=epoch)
-        wandb.log({"val/epoch": epoch, "val/accuracy": val_acc, "classification_report/classification_report": class_rep}, step=epoch)
-        print(f"Epoch {epoch}: Loss: {loss:.4f}, Val Acc: {val_acc:.4f}")
-        break
+        wandb.log({"val/epoch": epoch, "val/loss": val_loss, "val/accuracy": val_acc, "classification_report/classification_report": class_rep}, step=epoch)
+        print(f"Epoch {epoch}: Loss: {loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
     wandb.unwatch(model)
     wandb.finish()
@@ -128,9 +127,6 @@ def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
 
         # Forward pass
         logits = model(xs)
-
-        print(f"Logits: {logits.shape}, ys: {ys.shape}")
-        print(f"Logits: {logits}, ys: {ys}")
 
         # Compute the cross entropy loss
         loss = F.cross_entropy(logits, ys)
@@ -152,36 +148,42 @@ def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
     return np.mean(losses)
 
 
-def evaluate_epoch(model, data, epoch, device="cuda"):
+def evaluate_epoch(model, data, device="cuda"):
     model.eval()
-    preds = []
+    predictions = []
     targets = []
+    losses = []
 
     # Disable gradient computation for evaluation
     with torch.no_grad():
-        for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating epoch {epoch}", leave=True)):
+        for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating", leave=True)):
             xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
             xs, mask = xs.to(device), mask.to(device)
-            ys = batch.y
+            ys = batch.y.to(device)
 
             # Forward pass
             logits = model(xs, mask)
 
+            # Compute the cross entropy loss
+            loss = F.cross_entropy(logits, ys)
+
             # Get the predicted classes
-            pred = logits.argmax(dim=-1)
+            pred = torch.argmax(logits, 1)
+
+            losses.append(loss.item())
 
             # Append the predictions and targets
-            preds.append(pred.cpu().data.numpy())
-            targets.append(ys)
+            targets.append(ys.detach().cpu().numpy())
+            predictions.append(pred.detach().cpu().numpy())
         
     # Concatenate the predictions and targets
-    preds = np.hstack(preds)
+    predictions = np.hstack(predictions)
     targets = np.hstack(targets)
 
     # Compute the accuracy
-    accuracy = accuracy_score(targets, preds)
-    class_report = classification_report(targets, preds, zero_division=0, digits=3, output_dict=True)
-    return accuracy, class_report
+    accuracy = accuracy_score(targets, predictions)
+    class_report = classification_report(targets, predictions, zero_division=0, digits=3, output_dict=True)
+    return accuracy, class_report, np.mean(losses)
 
 
 if __name__ == '__main__':
