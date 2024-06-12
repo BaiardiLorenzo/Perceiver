@@ -1,5 +1,5 @@
 import datetime
-from matplotlib.pyplot import step
+from turtle import st
 import torch
 import wandb
 import torch.nn as nn
@@ -16,108 +16,132 @@ from tqdm import tqdm
 from datetime import datetime
 
 from lamb import Lamb
-from src.perceiver import Perceiver
+from train.config import PerceiverCfg, get_perceiver_model
 
 
 def main():
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
-    """
-    We used an architecture with 2 cross-attentions and 6 self-
-    attention layers for each block and otherwise used the same
-    architectural settings as ImageNet. We used a higher max-
-    imum frequency than for image data to account for the
-    irregular sampling structure of point clouds - we used a max
-    frequency of 1120 (10×the value used on ImageNet). We
-    obtained the best results using 64 frequency bands, and we 
-    noticed that values higher than 256 generally led to more
-    severe overfitting. We used a batch size of 512 and trained
-    with LAMB with a constant learning rate of 1 ×10−3: mod-
-    els saturated in performance within 50,000 training steps
-    """
+    batch_size = 16  # 64/512 
 
-    batch_size = 32  # 64/512 
+    # Load the ModelNet40 dataset
+    dl_train, dl_test = get_modelnet40_loaders(batch_size)
 
-    pre_transform, transform = T.NormalizeScale(), T.SamplePoints(2000)
+    # Create the Perceiver model
+    cfg = PerceiverCfg()
+    model = get_perceiver_model(cfg).to(device)
 
-    # Training and test datasets
-    train_dataset = ModelNet(root="./dataset", name="40", train=True, transform=transform, pre_transform=pre_transform)
-    test_dataset = ModelNet(root="./dataset", name="40", train=False, transform=transform, pre_transform=pre_transform)
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-
-    input_dim = 3
-    len_shape = 1
-    emb_dim = 512  # 512
-    latent_dim = 512  # 512
-    num_classes = 40
-
-    depth = 2  # 2  
-    latent_block = 6 # 6  
-    max_freq = 1120  # 1120  
-    num_bands = 64  # 64 
-    epochs = 50  # 120
+    # Parameters for training
+    epochs = 120  
     lr = 1e-3
-
-    model = Perceiver(
-        input_dim=input_dim,
-        len_shape=len_shape,
-        emb_dim=emb_dim,
-        latent_dim=latent_dim,
-        num_classes=num_classes,
-        depth=depth,
-        latent_blocks=latent_block,
-        heads=8,
-        fourier_encode=True,
-        max_freq=max_freq,
-        num_bands=num_bands
-    ).to(device)
-
     optimizer = Lamb(params=model.parameters(), lr=lr)
 
+    # Initialize wandb
     wandb.init(
         project="Deep Learning Exam",
         name="Perceiver: "+datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         # Track hyperparameters and run metadata
         config={
             "architecture": "Perceiver",
+            "depth": cfg.depth,
+            "latent_blocks": cfg.latent_blocks,
+            "max_freq": cfg.max_freq,
+            "num_bands": cfg.num_bands,
             "dataset": "ModelNet40",
-            "depth": depth,
-            "latent_blocks": latent_block,
-            "max_freq": max_freq,
-            "num_bands": num_bands,
             "epochs": epochs,
             "lr": lr,
-            "batch_size": batch_size,
             "optimizer": "Lamb",
+            "batch_size": batch_size,
             "device": device.type
         }
     )
-    wandb.watch(model, nn.CrossEntropyLoss(), log="all")
+    wandb.watch(model, nn.CrossEntropyLoss(), log="all", log_freq=10)
 
-    losses_accs = []
-    class_reports = []
+    model_path = "Perceiver_bs:"+str(batch_size)+"_lr:"+str(lr)+"_epochs:"+str(epochs)+".pth"
+
+    # Train and evaluate the model
+    results = {"train": [], "val": [], "class_rep": []}
+    early_stop_counter = 0
+    state_dict = None
     for epoch in range(epochs):
-        loss = train_epoch(model, train_dataloader, optimizer, epoch, device = device)
-        (val_acc, class_rep, val_loss) = evaluate_epoch(model, test_dataloader, device = device)
-        losses_accs.append((loss, val_acc))
-        class_reports.append(class_rep)
+        # Train the model 
+        train_loss = train_one_epoch(model, dl_train, epoch, optimizer, device=device)
 
-        wandb.log({"train/epoch": epoch, "train/loss": loss}, step=epoch)
-        wandb.log({"val/epoch": epoch, "val/loss": val_loss, "val/accuracy": val_acc, "classification_report/classification_report": class_rep}, step=epoch)
-        print(f"Epoch {epoch}: Loss: {loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        # Evaluate the model
+        val_loss, val_acc, class_rep = evaluate_epoch(model, dl_test, device=device)
+
+        results["train"].append(train_loss)
+        results["val"].append((val_loss, val_acc))
+        results["class_rep"].append(class_rep)
+
+        print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+
+        # Save the best model
+        if val_acc > max(results["val"], key=lambda x: x[1])[1]:
+            state_dict = model.state_dict()
+
+        # Early stopping
+        if val_loss < min(results["val"], key=lambda x: x[0])[0]:
+            early_stop_counter = 0
+        else:
+            early_stop_counter += 1
+            if early_stop_counter == 5:
+                print("Early stopping...")
+                break
+        
+        # Log the results
+        wandb.log({"train/epoch": epoch, "train/loss": train_loss}, step=epoch)
+        wandb.log({"val/epoch": epoch, "val/loss": val_loss, "val/accuracy": val_acc}, step=epoch)
+        wandb.log({"class_rep/classification_report": class_rep}, step=epoch)
 
     wandb.unwatch(model)
     wandb.finish()
 
+    # Save the model
+    torch.save(state_dict, model_path)
 
-def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
+
+def get_modelnet40_loaders(batch_size: int):
+    """
+    Get ModelNet40 dataset loaders
+
+    The ModelNet40 dataset is a collection of 3D CAD models from 40 categories.
+    Each model is represented as a point cloud with 2000 points.
+    The dataset is split into 9,843 training samples and 2,468 testing samples.
+
+    Every point cloud is represented as a torch_geometric.data.Data object with the following attributes:
+    - pos: Tensor of shape (N, 3) where N is the number of points and 3 is the number of dimensions
+    - y: Integer representing the class of the object
+    - batch: Tensor of shape (N,) where N is the number of points. This is used to indicate which point belongs to which object.
+
+    Args:
+    batch_size: int: Batch size
+
+    Returns:
+    DataLoader: Training DataLoader
+    DataLoader: Validation DataLoader
+    DataLoader: Testing DataLoader
+    """
+    normalize, point_sampling = T.NormalizeScale(), T.SamplePoints(2000)
+
+    # Lenght of ModelNet40 dataset is 9,843 for training and 2,468 for testing
+    ds_train = ModelNet(root="./dataset", name="40", train=True, transform=point_sampling, pre_transform=normalize)
+    ds_test = ModelNet(root="./dataset", name="40", train=False, transform=point_sampling, pre_transform=normalize)
+
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True)
+    dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True)
+
+    return dl_train, dl_test
+
+
+def train_one_epoch(model: nn.Module, data: DataLoader, epoch: int, opt: optim.Optimizer, device="cuda"):
     model.train()
+
     losses = []
 
     for (i, batch) in enumerate(tqdm(data, desc=f"Training epoch {epoch}", leave=True)):
+        # Get the input and target data and move it to the device
         xs, _ = to_dense_batch(batch.pos, batch=batch.batch)
         xs = xs.to(device)
         ys = batch.y.to(device)
@@ -137,10 +161,6 @@ def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
         # Update the model parameters
         opt.step()
 
-        # Update the learning rate if a scheduler is provided
-        if scheduler is not None:
-            scheduler.step()
-
         # Log the loss
         losses.append(loss.item())
 
@@ -148,8 +168,9 @@ def train_epoch(model, data, opt, epoch, scheduler=None, device="cuda"):
     return np.mean(losses)
 
 
-def evaluate_epoch(model, data, device="cuda"):
+def evaluate_epoch(model: nn.Module, data: DataLoader, device="cuda"):
     model.eval()
+
     predictions = []
     targets = []
     losses = []
@@ -157,12 +178,13 @@ def evaluate_epoch(model, data, device="cuda"):
     # Disable gradient computation for evaluation
     with torch.no_grad():
         for (i, batch) in enumerate(tqdm(data, desc=f"Evaluating", leave=True)):
-            xs, mask = to_dense_batch(batch.pos, batch=batch.batch)
-            xs, mask = xs.to(device), mask.to(device)
+            # Get the input and target data and move it to the device
+            xs, _ = to_dense_batch(batch.pos, batch=batch.batch)
+            xs = xs.to(device)
             ys = batch.y.to(device)
 
             # Forward pass
-            logits = model(xs, mask)
+            logits = model(xs)
 
             # Compute the cross entropy loss
             loss = F.cross_entropy(logits, ys)
