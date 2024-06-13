@@ -24,6 +24,7 @@ def train_evaluate_model(
         epochs: int, 
         optimizer: optim.Optimizer, 
         sched: optim.lr_scheduler = None, 
+        early_stop: bool = False,
         device="cuda",
     ):
     # Initialize wandb
@@ -85,7 +86,7 @@ def train_evaluate_model(
         wandb.log({"val/epoch": epoch, "val/loss": val_loss, "val/accuracy": val_acc}, step=epoch)
         wandb.log({"class_rep/classification_report": class_rep}, step=epoch)
 
-        if early_stop_counter == 5:
+        if early_stop_counter == 5 and early_stop:
             print("Early stopping...")
             break
 
