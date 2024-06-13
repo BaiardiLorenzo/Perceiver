@@ -248,6 +248,46 @@ class AttentionBlockTest(unittest.TestCase):
         # self.assertFalse(torch.any(torch.isnan(x)))
 
 
+    def test_attention_key_mask(self):
+        """
+        Test the MultiheadAttention with key padding mask
+
+        :return: tensor of correct shape and values
+        """
+        # [Length, Batch, Channels]
+        M, B, C = 20, 32, 3
+        D, N = 8, 8
+
+        # ------------------------------------------------
+        # Create a tensor of shape [Length, Batch, Channels]
+        x = torch.randn((M, B, C))
+
+        # Create a latent tensor of shape [Length, Batch, Channels]
+        z = create_latent_array(N, D, B)
+
+        # Create a key padding mask
+        key_padding_mask = torch.zeros((B, M), dtype=torch.bool)
+
+        # Multihead attention
+        attention = nn.MultiheadAttention(
+            embed_dim=D,
+            num_heads=1,
+            kdim=C,
+            vdim=C,
+        )
+
+        # Compute the cross attention
+        a, _ = attention(query=z, key=x, value=x, key_padding_mask=key_padding_mask)
+
+        # Return a tensor of shape [Length, Batch, Channels]
+        self.assertEqual(a.shape, (N, B, D))
+
+        # Assert that the values of the input tensor are not all zeros or NaN
+        # print(f"Result: {a}")
+        self.assertTrue(torch.any(a != 0))
+        self.assertFalse(torch.any(torch.isnan(a)))
+
+
 class LatentTransformerBlockTest(unittest.TestCase):
 
     def test_latent_transformer(self):

@@ -15,7 +15,7 @@ class DenseBlock(nn.Module):
         passed through a linear layer, activated with a GELU nonlinearity (Hendrycks
         & Gimpel, 2016), and passed through a final linear layer.
         We used dropout throughout the network in earlier experiments,
-        but we found this led to degraded performance, so no dropout is used
+        but we found this led to degraded performance, so no dropout is used.
 
         :param emb_dim: Embedding dimension
         :param dropout: Dropout rate (default: 0.0)
