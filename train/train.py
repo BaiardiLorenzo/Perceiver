@@ -27,10 +27,13 @@ def train_evaluate_model(
         early_stop: bool = False,
         device="cuda",
     ):
+
+    model_path = "Perceiver::"+datetime.now().strftime("%Y-%m-%d %H:%M:%S")+"_"+dataset_name+"_bs:"+str(batch_size)+"_lr:"+str(lr)+"_epochs:"+str(epochs)+"_maxfreq:"+str(model.max_freq)+"_bands:"+str(model.num_bands)
+
     # Initialize wandb
     wandb.init(
         project="Deep Learning Exam",
-        name="Perceiver: "+datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        name=model_path,
         # Track hyperparameters and run metadata
         config={
             "architecture": "Perceiver",
@@ -93,13 +96,12 @@ def train_evaluate_model(
     wandb.unwatch(model)
     wandb.finish()
 
-    model_folder = "model_states/"
-    model_path = model_folder+"Perceiver_"+dataset_name+"_bs:"+str(batch_size)+"_lr:"+str(lr)+"_epochs:"+str(epochs_done)+"_maxfreq:"+str(model.max_freq)+"_bands:"+str(model.num_bands)+".pth"
+    model_states_path = "model_states/"+model_path+".pth"
 
     # Save the best model
     if state_dict is not None:
-        torch.save(state_dict, model_path)
-        print(f"Model saved to {model_path}")
+        torch.save(state_dict, model_states_path)
+        print(f"Model saved to {model_states_path}")
 
 
 def train_one_epoch(model: nn.Module, data: DataLoader, epoch: int, opt: optim.Optimizer, sched: optim.lr_scheduler = None, device="cuda"):

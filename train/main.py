@@ -10,7 +10,7 @@ from train import train_evaluate_model
 
 
 def train_modelnet40():
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
     batch_size = 16  # 64/512 
@@ -27,7 +27,7 @@ def train_modelnet40():
     lr = 1e-3
     optimizer = Lamb(params=model.parameters(), lr=lr)
 
-    train_evaluate_model(model, "ModelNet40", dl_train, dl_test, batch_size, lr, epochs, optimizer, sched=None, device=device)
+    train_evaluate_model(model, "ModelNet40", dl_train, dl_test, batch_size, lr, epochs, optimizer, sched=None, early_stop=False, device=device)
 
 
 def train_imagenet():

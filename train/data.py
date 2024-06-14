@@ -64,9 +64,14 @@ def get_modelnet40_loaders(batch_size: int):
     # UNIT-CUBE NORMALIZATION: Normalize the points to be inside the unit cube
 
     # FIXME if this transforms are correctly implemented
-    n_points = 4096  # Change this to 2000
+    # FIXME Best results are obtained with 2000 points and Normalizing Scale
+    # TODO without sample points
+
+    n_points = 2048  # Change this to 2048
     train_transform = T.Compose([
         T.SamplePoints(n_points),
+        # T.RandomScale((0.9, 1.1)),
+        T.NormalizeScale(),
         # T.Center(),
         # T.RandomScale((0.9, 1.1)),
         # T.Center(),
@@ -75,6 +80,7 @@ def get_modelnet40_loaders(batch_size: int):
 
     test_transform = T.Compose([
         T.SamplePoints(n_points),
+        T.NormalizeScale(),
         # T.Center(),
         # UnitCubeNormalizer(),
     ])
