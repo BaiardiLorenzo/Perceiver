@@ -10,7 +10,7 @@ from train import train_evaluate_model
 
 
 def train_modelnet40():
-    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
     batch_size = 16  # 64/512 

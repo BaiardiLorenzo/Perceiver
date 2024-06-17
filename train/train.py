@@ -96,6 +96,7 @@ def train_evaluate_model(
     wandb.unwatch(model)
     wandb.finish()
 
+    # model_states_path = "model_states/"+model_path+".pth"
     model_states_path = "model_states/"+model_path+".pth"
 
     # Save the best model
