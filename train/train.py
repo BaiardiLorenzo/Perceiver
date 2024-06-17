@@ -97,7 +97,7 @@ def train_evaluate_model(
     wandb.finish()
 
     # model_states_path = "model_states/"+model_path+".pth"
-    model_states_path = "model_states/"+model_path+".pth"
+    model_states_path = model_path+".pth"
 
     # Save the best model
     if state_dict is not None:
