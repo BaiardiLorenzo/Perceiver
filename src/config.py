@@ -48,12 +48,13 @@ class PerceiverModelNet40Cfg:
     num_bands: int = 64,
 
 
-def get_perceiver_model(cfg):
+def get_perceiver_model(cfg, device):
     """
     Get Perceiver model with the given configuration
 
     Args:
         cfg: Configuration class for the Perceiver model
+        device: str: Device to use for the model
 
     Returns:
         Perceiver: Perceiver model 
@@ -73,4 +74,4 @@ def get_perceiver_model(cfg):
         input_shapes=cfg.input_shapes,
         max_freq=cfg.max_freq,
         num_bands=cfg.num_bands,
-    ), str(cfg), cfg
+    ).to(device), cfg

@@ -13,19 +13,32 @@ def main():
     batch_size = 16  # 512 
 
     # Load the ModelNet40 dataset
+    dataset_name = "ModelNet40"
     dl_train, dl_test = get_modelnet40_loaders(batch_size)
 
     # Create the Perceiver model
-    cfg = PerceiverModelNet40Cfg()
-    model = get_perceiver_model(cfg).to(device)
+    model, cfg = get_perceiver_model(PerceiverModelNet40Cfg(), device)
 
     # Parameters for training
+    early_stop = True
     epochs = 120  
     lr = 1e-3
 
-    optimizer = optim.Lamb(params=model.parameters(), lr=lr)
+    opt = optim.Lamb(params=model.parameters(), lr=lr)
 
-    train_evaluate_model(model, "ModelNet40", dl_train, dl_test, batch_size, lr, epochs, optimizer, sched=None, early_stop=True, device=device)
+    train_evaluate_model(
+        model = model, 
+        cfg = cfg,
+        dataset_name = dataset_name,
+        dl_train = dl_train, 
+        dl_test = dl_test, 
+        batch_size = batch_size, 
+        lr = lr, 
+        epochs = epochs, 
+        opt = opt, 
+        early_stop = early_stop, 
+        device = device,
+    )
 
 
 if __name__ == '__main__':

@@ -1,12 +1,11 @@
 import torch
-import torchvision
 import torch_geometric.transforms as T
 
 from torch_geometric.datasets import ModelNet
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
-from torch_geometric.utils import to_dense_batch
+
 
 class UnitCubeNormalizer(BaseTransform):
     def __call__(self, data: Data) -> Data:
