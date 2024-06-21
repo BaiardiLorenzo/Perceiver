@@ -16,7 +16,7 @@ class TestModelNet(unittest.TestCase):
         Test that the training dataset is loaded correctly
         :return:
         """
-        train_dataset = ModelNet(root="./dataset", name="40", train=True)
+        train_dataset = ModelNet(root="./dataset/modelnet40", name="40", train=True)
         train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
         self.assertEqual(len(train_dataset), 9843)
@@ -28,7 +28,7 @@ class TestModelNet(unittest.TestCase):
         Test that the test dataset is loaded correctly
         :return:
         """
-        test_dataset = ModelNet(root="./dataset", name="40", train=False)
+        test_dataset = ModelNet(root="./dataset/modelnet40", name="40", train=False)
         test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=True)
 
         self.assertEqual(len(test_dataset), 2468)
@@ -40,7 +40,7 @@ class TestModelNet(unittest.TestCase):
         Test that the get item method works correctly
         :return:
         """
-        train_dataset = ModelNet(root="./dataset", name="40", train=True)
+        train_dataset = ModelNet(root="./dataset/modelnet40", name="40", train=True)
         train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
         for batch in train_dataloader:
@@ -55,7 +55,7 @@ class TestModelNet(unittest.TestCase):
         Test that the sample points transform works correctly
         :return:
         """
-        train_dataset = ModelNet(root="./dataset", name="40", train=True, transform=SamplePoints(1024))
+        train_dataset = ModelNet(root="./dataset/modelnet40", name="40", train=True, transform=SamplePoints(1024))
         train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
         for batch in train_dataloader:
@@ -67,7 +67,7 @@ class TestModelNet(unittest.TestCase):
         """
         Test that the training dataset is loaded correctly
         """
-        train_dataset = ModelNet(root="./dataset", name="40", train=True)
+        train_dataset = ModelNet(root="./dataset/modelnet40", name="40", train=True)
         train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
         for (i, batch) in enumerate(tqdm(train_dataloader)):

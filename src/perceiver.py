@@ -1,36 +1,16 @@
-import torch
-
 from torch import nn
 from torch import Tensor
 
-from src.embedding import create_latent_array
-from src.positional_embedding import positional_embedding
-from src.layer import PerceiverBlock, Classifier
+from typing import Optional
+
+from src.latent_array import get_latents_array
+from src.positional_encoding import ff_positional_encoding
+from src.layer import PerceiverBlock, Decoder
 
 
 class Perceiver(nn.Module):
-
-    def __init__(
-            self,
-            input_dim: int,
-            len_shape: int = 1,
-            emb_dim: int = 512,
-            latent_dim: int = 512,
-            num_classes: int = 40,
-            depth: int = 2,
-            latent_blocks: int = 6,
-            heads: int = 8,
-            fourier_encode: bool = True,
-            max_freq: int = 1120,
-            num_bands: int = 64
-    ):
-        """
-        Perceiver model:
-        - Latent Array
-        - Positional Encoding
-        - Perceiver Block: Cross-Attention and Transformer
-        - Classifier
-
+    """
+    From the paper:
         We build our architecture from two components:
         (i) a cross-attention module that maps a byte array (e.g. an
         pixel array) and a latent array to a latent array, and (ii) a
@@ -54,76 +34,91 @@ class Perceiver(nn.Module):
         as a recurrent neural network (RNN), but unrolled in depth
         using the same input, rather than in time. 
         All attention modules in the Perceiver are non-causal: we use no masks.
+    """
+    def __init__(
+        self,
+        input_dim: int,
+        latent_length: int = 512,
+        latent_dim: int = 1024,
+        num_classes: int = 40,
+        latent_blocks: int = 6,
+        heads: int = 8,
+        perceiver_block: int = 2,
+        share_weights: bool = False,
+        ff_pos_encoding: bool = True,
+        input_shapes: int = 1,
+        max_freq: int = 1120,
+        num_bands: int = 64,
+    ):
+        """
+        Initialize the Perceiver model:
+            - Latent array
+            - n Perceiver blocks
+            - Decoder
 
-        :param input_dim: The channel dimension of the input tensor
-        :param len_shape: The length of the shape of the input tensor (default: 1)
-        :param emb_dim: The channel dimension of the latent tensor
-        :param latent_dim: The latent dimension
-        :param num_classes: The number of classes for the classification task
-        :param depth: The number of perceiver blocks
-        :param latent_blocks: The number of latent blocks for every perceiver block
-        :param heads: The number of heads in the multi-head attention in the perceiver block
-        :param fourier_encode: Whether to use Fourier encoding (default: True)
-        :param max_freq: The maximum frequency for Fourier encoding
-        :param num_bands: The number of bands for Fourier encoding
+        Args:
+            input_dim (int): The input dimension
+            latent_length (int): The latent length. Defaults to 512.
+            latent_dim (int): The latent dimension. Defaults to 1024.
+            num_classes (int): The number of classes. Defaults to 40.
+            latent_blocks (int): The number of latent blocks. Defaults to 6.
+            heads (int): The number of heads. Defaults to 8.
+            perceiver_block (int): The number of perceiver blocks. Defaults to 2.
+            share_weights (bool): Share the weights of the model. Defaults to False.
+            ff_pos_encoding (bool): Use Fourier encoding. Defaults to True.
+            input_shapes (int): The input shapes. Defaults to 1.
+            max_freq (int): The maximum frequency. Defaults to 1120.
+            num_bands (int): The number of bands. Defaults to 64.
         """
         super().__init__()
-        self.input_dim = input_dim
-        self.len_shape = len_shape
-        self.emb_dim = emb_dim
-        self.latent_dim = latent_dim
-        self.num_classes = num_classes
-        self.depth = depth
-        self.latent_blocks = latent_blocks
-        self.heads = heads
-        self.fourier_encode = fourier_encode
+        self.ff_pos_encoding = ff_pos_encoding
         self.max_freq = max_freq
         self.num_bands = num_bands
 
         # The latent array
-        self.latent = create_latent_array(self.latent_dim, self.emb_dim)
+        self.latent_array = get_latents_array(latent_length, latent_dim)
 
-        # Add the Fourier encoding to the input tensor
-        if fourier_encode:
-            self.input_dim = (self.len_shape * (num_bands * 2 + 1)) + self.input_dim
+        # Change the input dimension if Fourier encoding is used
+        # Input_dim = [Input_dim + len(Dims)*(num_bands * 2 + 1)] if Fourier encoding is used
+        if self.ff_pos_encoding:
+            input_dim = (input_shapes * (num_bands * 2 + 1)) + input_dim
+        
+        # Perceiver blocks
+        # If share_weights is True, we share the weights of the model
+        self.layers = nn.ModuleList([PerceiverBlock(latent_dim, input_dim, latent_blocks, heads) for _ in range(perceiver_block)])
+        if share_weights:
+            self.layers = nn.ModuleList([self.layers[0] for _ in range(perceiver_block)])
 
-        # Perceiver block
-        self.layers = PerceiverBlock(self.emb_dim, self.input_dim, self.heads, self.latent_blocks)
+        # Decoder
+        self.decoder = Decoder(latent_dim, num_classes)
 
-        # Classifier
-        self.classifier = Classifier(self.emb_dim, self.num_classes)
 
-    def forward(self, x: Tensor, key_mask: Tensor=None) -> Tensor:
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         """
         Forward pass:
-        - Positional Encoding
-        - Flatten the input tensor 
-        - Repeat the latent tensor to match the batch size
-        - Compute the perceiver block sharing the weights of the model
-        - Classifier
+            - Fourier Positional Encoding to the input tensor (if ff_pos_encoding is True)
+            - Compute the perceiver blocks
+            - Decoder
 
-        :param x: input tensor [Batch, [Dims], Channels]
-        :param key_mask: key padding mask for the unbatched input tensor
-        :return: output tensor [Batch, Num_classes]
+        Args:
+            x (Tensor): input tensor [Batch, [Dims], Channels]
+            mask (Tensor, optional): mask tensor. Defaults to None.
         """
-
-        # Positional encoding
-        if self.fourier_encode:
-            x = positional_embedding(x, self.max_freq, self.num_bands)
+        # Fourier Positional Encoding
+        if self.ff_pos_encoding:
+            x = ff_positional_encoding(x, self.max_freq, self.num_bands)
 
         # Flatten the input tensor
-        x = x.view(x.shape[0], x.shape[1], -1)
+        # [Batch, [Dims], Channels] -> [Batch, Input_Length, Input_dim]
+        x = x.view(x.shape[0], -1, x.shape[-1])
 
         # Repeat the latent tensor to match the batch size
-        latent = self.latent.expand(-1, x.shape[0], -1)
-
-        # Change the shape of the input tensor to [Length, Batch, Input_dim]
-        x = x.permute(1, 0, 2)
-
-        # Compute the perceiver block sharing the weights of the model
-        for _ in range(self.depth):
-            xx = self.layers(x, latent, key_mask=key_mask)    
+        # [Emb_length, Emb_dim] -> [Batch, Emb_length, Emb_dim]
+        latent = self.latent_array.repeat(x.shape[0], 1, 1)
+             
+        # Compute the perceiver block 
+        for layer in self.layers:
+            latent = layer(x, latent, mask)
 
         # Classifier
-        xx = self.classifier(xx)
-        return xx
+        return self.decoder(latent)
