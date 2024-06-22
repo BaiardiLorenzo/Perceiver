@@ -1,4 +1,8 @@
 import torch
+import wandb
+import os
+from glob import glob
+from tqdm import tqdm
 import torch_geometric.transforms as T
 
 from torch_geometric.datasets import ModelNet
@@ -106,28 +110,125 @@ def get_modelnet40_loaders(batch_size: int):
         DataLoader: Testing DataLoader
     """
 
-    n_points = 2048  
-    train_transform = T.Compose([
+    paper_transforms = T.Compose([
         ZeroCenter(),
         T.RandomScale((0.9, 1.1)),
         T.Center(),
         UnitCubeNormalizer(),
+        T.SamplePoints(2048),
+    ])
+
+    n_points = 2048  
+    train_transform = T.Compose([
         T.SamplePoints(n_points),
+        T.RandomScale((0.9, 1.1)),
+        T.NormalizeScale(),
     ])  
 
     test_transform = T.Compose([
-        ZeroCenter(),
-        T.Center(),
-        UnitCubeNormalizer(),
-        T.SamplePoints(n_points),  
+        T.SamplePoints(n_points),
+        T.NormalizeScale(),
     ])
 
     # Lenght of ModelNet40 dataset is 9,843 for training and 2,468 for testing
-    ds_train = ModelNet(root="./dataset/modelnet40", name="40", train=True, transform=train_transform, num_workers=4)
-    ds_test = ModelNet(root="./dataset/modelnet40", name="40", train=False, transform=test_transform, num_workers=4)
+    ds_train = ModelNet(root="./dataset/modelnet40", name="40", train=True, transform=train_transform)
+    ds_test = ModelNet(root="./dataset/modelnet40", name="40", train=False, transform=test_transform)
 
-    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True)
-    dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True)
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=4)
+    dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    return dl_train, dl_test
+    return dl_train, dl_test, train_transform
 
+
+def visualize_modelnet40():
+    wandb_project = "pyg-point-cloud" #@param {"type": "string"}
+    wandb_run_name = "modelnet40/train/sampling-comparison" #@param {"type": "string"}
+
+
+    wandb.init(project=wandb_project, name=wandb_run_name, job_type="eda")
+
+    # Set experiment configs to be synced with wandb
+    config = wandb.config
+    config.display_sample = 2048  #@param {type:"slider", min:256, max:4096, step:16}
+    config.modelnet_dataset_alias = "./dataset/modelnet40" #@param ["ModelNet10", "ModelNet40"] {type:"raw"}
+
+    # Classes for ModelNet10 and ModelNet40
+    categories = sorted([
+        x.split(os.sep)[-2]
+        for x in glob(os.path.join(
+            config.modelnet_dataset_alias, "raw", '*', ''
+        ))
+    ])
+
+    config.categories = categories
+
+    transform = T.Compose([
+        T.SamplePoints(config.display_sample),
+        ZeroCenter(),
+        T.RandomScale((0.9, 1.1)),
+        T.Center(),
+        UnitCubeNormalizer(),
+    ])
+    
+    train_dataset = ModelNet(
+        root=config.modelnet_dataset_alias,
+        name=config.modelnet_dataset_alias[-2:],
+        train=True,
+        transform=transform,
+    )
+
+    val_dataset = ModelNet(
+        root=config.modelnet_dataset_alias,
+        name=config.modelnet_dataset_alias[-2:],
+        train=False,
+        transform=transform,
+    )
+
+    table = wandb.Table(columns=["Model", "Class", "Split"])
+    category_dict = {key: 0 for key in config.categories}
+    for idx in tqdm(range(len(train_dataset))):
+        point_cloud = wandb.Object3D(train_dataset[idx].pos.numpy())
+        category = config.categories[int(train_dataset[idx].y.item())]
+        category_dict[category] += 1
+        table.add_data(
+            point_cloud,
+            category,
+            "Train"
+        )
+
+    data = [[key, category_dict[key]] for key in config.categories]
+    wandb.log({
+        f"{config.modelnet_dataset_alias} Class-Frequency Distribution" : wandb.plot.bar(
+            wandb.Table(data=data, columns = ["Class", "Frequency"]),
+            "Class", "Frequency",
+            title=f"{config.modelnet_dataset_alias} Class-Frequency Distribution"
+        )
+    })
+
+    table = wandb.Table(columns=["Model", "Class", "Split"])
+    category_dict = {key: 0 for key in config.categories}
+    for idx in tqdm(range(len(val_dataset))):
+        point_cloud = wandb.Object3D(val_dataset[idx].pos.numpy())
+        category = config.categories[int(val_dataset[idx].y.item())]
+        category_dict[category] += 1
+        table.add_data(
+            point_cloud,
+            category,
+            "Test"
+        )
+    wandb.log({config.modelnet_dataset_alias: table})
+
+    data = [[key, category_dict[key]] for key in config.categories]
+    wandb.log({
+        f"{config.modelnet_dataset_alias} Class-Frequency Distribution" : wandb.plot.bar(
+            wandb.Table(data=data, columns = ["Class", "Frequency"]),
+            "Class", "Frequency",
+            title=f"{config.modelnet_dataset_alias} Class-Frequency Distribution"
+        )
+    })
+
+    wandb.finish()
+
+
+if __name__ == "__main__":
+    visualize_modelnet40()

@@ -4,7 +4,7 @@ from src.perceiver import Perceiver
 
 
 @dataclass
-class PerceiverModelNet40Cfg:
+class PerceiverModelNet40Cfg():
     """
     Configuration for Perceiver model on ModelNet40
 
@@ -34,18 +34,18 @@ class PerceiverModelNet40Cfg:
         max_freq: int: Maximum frequency
         num_bands: int: Number of bands
     """
-    input_dim: int = 3,
-    latent_length: int = 512,
-    latent_dim: int = 1024,
-    num_classes: int = 40,
-    latent_blocks: int = 6,
-    heads: int = 8,
-    perceiver_block: int = 2,
-    share_weights: bool = False,
-    ff_pos_encoding: bool = True,
-    input_shapes: int = 1,
-    max_freq: int = 1120,
-    num_bands: int = 64,
+    input_dim: int = 3
+    latent_length: int = 512
+    latent_dim: int = 1024
+    num_classes: int = 40
+    latent_blocks: int = 6
+    heads: int = 8
+    perceiver_block: int = 2
+    share_weights: bool = True
+    ff_pos_encoding: bool = True
+    input_shapes: int = 1
+    max_freq: int = 1120
+    num_bands: int = 64
 
 
 def get_perceiver_model(cfg, device):

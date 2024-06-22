@@ -20,6 +20,7 @@ def train_evaluate_model(
         dataset_name: str,
         dl_train: DataLoader, 
         dl_test: DataLoader, 
+        train_trans: str,
         batch_size: int, 
         lr: int, 
         epochs: int, 
@@ -30,9 +31,9 @@ def train_evaluate_model(
 
     time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     test_name = "Perceiver::"+time+"_"+dataset_name+"_epochs:"+str(epochs)+"_bs:"+str(batch_size)+"_lr:"+str(lr)
-    test_name_cfg = test_name + "_cfg:" + str(cfg)
+    test_name_cfg = test_name + "_cfg:" + str(cfg) + "_dataset_transform:" + train_trans
 
-    wandb_init(test_name_cfg, model, cfg, dataset_name, epochs, batch_size, lr, device)
+    wandb_init(test_name_cfg, model, cfg, dataset_name, train_trans, epochs, batch_size, lr, device)
 
     # Train and evaluate the model
     train_results = {"loss": [], "acc": [], "class_rep": []}
@@ -86,7 +87,7 @@ def train_evaluate_model(
         print(f"Model saved to {model_states_path}")
 
 
-def wandb_init(test_name, model, cfg, dataset, epochs, bs, lr, device, project="Deep Learning Exam"):
+def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, lr, device, project="Deep Learning Exam"):
     # Initialize wandb
     wandb.init(
         project=project,
@@ -95,6 +96,7 @@ def wandb_init(test_name, model, cfg, dataset, epochs, bs, lr, device, project="
         config={
             "architecture": "Perceiver",
             "dataset": dataset,
+            "dataset_transform": train_trans,
             "latent_length": cfg.latent_length,
             "latent_dim": cfg.latent_dim,
             "latent_blocks": cfg.latent_blocks,
@@ -144,7 +146,7 @@ def train_epoch(model: nn.Module, data: DataLoader, epoch: int, opt: optim.Optim
         opt.step()
 
         # Append the loss, predictions and ground truths
-        losses.extend(loss.item())
+        losses.append(loss.item())
         preds.extend(pred.detach().cpu().numpy())
         gts.extend(ys.detach().cpu().numpy())
 
@@ -179,7 +181,7 @@ def evaluate_epoch(model: nn.Module, data: DataLoader, device="cuda"):
             pred = torch.argmax(logits, 1)
 
             # Append the loss, predictions and ground truths
-            losses.extend(loss.item())
+            losses.append(loss.item())
             preds.extend(pred.detach().cpu().numpy())
             gts.extend(ys.detach().cpu().numpy())
 

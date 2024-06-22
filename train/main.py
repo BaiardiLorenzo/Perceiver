@@ -14,11 +14,11 @@ def main():
 
     # Load the ModelNet40 dataset
     dataset_name = "ModelNet40"
-    dl_train, dl_test = get_modelnet40_loaders(batch_size)
+    dl_train, dl_test, train_trans = get_modelnet40_loaders(batch_size)
 
     # Create the Perceiver model
     model, cfg = get_perceiver_model(PerceiverModelNet40Cfg(), device)
-
+    
     # Parameters for training
     early_stop = True
     epochs = 120  
@@ -32,6 +32,7 @@ def main():
         dataset_name = dataset_name,
         dl_train = dl_train, 
         dl_test = dl_test, 
+        train_trans = str(train_trans),
         batch_size = batch_size, 
         lr = lr, 
         epochs = epochs, 

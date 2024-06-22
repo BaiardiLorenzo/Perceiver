@@ -32,7 +32,6 @@ def get_latents_array(
             torch.zeros(latent_length, latent_dim),
             mean=mean,
             std=std,
-            a=a,
-            b=b
+            a=a, b=b
         )
     )

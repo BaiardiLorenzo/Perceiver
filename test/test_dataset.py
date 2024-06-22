@@ -1,6 +1,5 @@
 from re import S
 import unittest
-import torch
 
 from tqdm import tqdm
 from torch_geometric.loader import DataLoader
