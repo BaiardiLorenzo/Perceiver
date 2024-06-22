@@ -110,6 +110,7 @@ def get_modelnet40_loaders(batch_size: int):
         DataLoader: Testing DataLoader
     """
 
+    """
     paper_transforms = T.Compose([
         ZeroCenter(),
         T.RandomScale((0.9, 1.1)),
@@ -117,6 +118,7 @@ def get_modelnet40_loaders(batch_size: int):
         UnitCubeNormalizer(),
         T.SamplePoints(2048),
     ])
+    """
 
     n_points = 2048  
     train_transform = T.Compose([
@@ -143,7 +145,6 @@ def get_modelnet40_loaders(batch_size: int):
 def visualize_modelnet40():
     wandb_project = "pyg-point-cloud" #@param {"type": "string"}
     wandb_run_name = "modelnet40/train/sampling-comparison" #@param {"type": "string"}
-
 
     wandb.init(project=wandb_project, name=wandb_run_name, job_type="eda")
 
