@@ -69,7 +69,7 @@ def get_modelnet40_loaders(batch_size: int):
 
     Preprocessing steps:
         - Zero-center the points
-        - Randomly scale the points by a factor between 0.9 and 1.1
+        - Randomly scale the points by a factor between 0.99 and 1.01
         - Zero-mean the points
         - Normalize the points to be inside the unit cube
 
@@ -84,7 +84,7 @@ def get_modelnet40_loaders(batch_size: int):
     """
     paper_transforms = T.Compose([
         T.Center(),
-        T.RandomScale((0.9, 1.1)),
+        T.RandomScale((0.99, 1.01)),
         T.Center(),
         UnitCubeNormalizer(),
         T.SamplePoints(2048),
@@ -94,7 +94,7 @@ def get_modelnet40_loaders(batch_size: int):
     n_points = 2048  
     train_transform = T.Compose([
         T.Center(),
-        T.RandomScale((0.9, 1.1)),
+        T.RandomScale((0.99, 1.01)),
         T.Center(),
         UnitCubeNormalization(),
         T.SamplePoints(n_points),

@@ -36,7 +36,7 @@ class PerceiverModelNet40Cfg():
     """
     input_dim: int = 3
     latent_length: int = 512
-    latent_dim: int = 1024
+    latent_dim: int = 512 # 1024
     num_classes: int = 40
     latent_blocks: int = 6
     heads: int = 8
