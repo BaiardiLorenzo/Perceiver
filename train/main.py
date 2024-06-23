@@ -20,8 +20,8 @@ def main():
     model, cfg = get_perceiver_model(PerceiverModelNet40Cfg(), device)
     
     # Parameters for training
-    early_stop = True
-    epochs = 120  
+    early_stop = False
+    epochs = 100  
     lr = 1e-3
 
     opt = optim.Lamb(params=model.parameters(), lr=lr)

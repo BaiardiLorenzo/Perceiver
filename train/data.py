@@ -11,7 +11,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 
 
-class UnitCubeNormalizer(BaseTransform):
+class UnitCubeNormalization(BaseTransform):
     def __call__(self, data: Data) -> Data:
         # Assume that data.pos contains the node positions as a tensor of shape [num_nodes, num_dimensions]
         """
@@ -32,10 +32,11 @@ class UnitCubeNormalizer(BaseTransform):
             max_values, _ = torch.max(points, dim=0)
 
             # Compute center
-            center = (min_values + max_values) / 2.0
+            center = (min_values + max_values) * 0.5   
 
-            # Compute scaling factor
-            scale_factor = 1.0 / torch.max(max_values - min_values)
+            # Compute scaling factor for each axis
+            sizes = (max_values - min_values)
+            scale_factor = 1/torch.max(sizes)
 
             # Translate and scale points
             translated_points = points - center
@@ -47,42 +48,12 @@ class UnitCubeNormalizer(BaseTransform):
         return data
     
 
-class ZeroCenter(BaseTransform):
-    """
-    Zero center the point cloud
-    
-    Args:
-        - data (Data): A PyTorch Geometric Data object containing the point cloud in 'pos' attribute.
-
-    Returns:
-        - data (Data): The transformed Data object with zero-centered points in 'pos' attribute.
-    """
-    def __call__(self, data: Data) -> Data:
-        if hasattr(data, 'pos'):
-            points = data.pos  
-
-            # Compute min and max along each axis
-            min_values, _ = torch.min(points, dim=0)
-            max_values, _ = torch.max(points, dim=0)
-
-            # Compute center
-            center = (min_values + max_values) / 2.0
-
-            # Translate and scale points
-            points = points - center
-
-            # Update 'pos' attribute in the data object
-            data.pos = points
-        
-        return data
-        
-
 def get_modelnet40_loaders(batch_size: int):
     """
     Get ModelNet40 dataset loaders
 
     The ModelNet40 dataset is a collection of 3D CAD models from 40 categories.
-    Each model is represented as a point cloud with about 2000 points.
+    Each model is represented as a point cloud with 2048 points.
     The dataset is split into 9,843 training samples and 2,468 testing samples.
 
     From the paper:
@@ -112,7 +83,7 @@ def get_modelnet40_loaders(batch_size: int):
 
     """
     paper_transforms = T.Compose([
-        ZeroCenter(),
+        T.Center(),
         T.RandomScale((0.9, 1.1)),
         T.Center(),
         UnitCubeNormalizer(),
@@ -122,24 +93,40 @@ def get_modelnet40_loaders(batch_size: int):
 
     n_points = 2048  
     train_transform = T.Compose([
-        T.SamplePoints(n_points),
+        T.Center(),
         T.RandomScale((0.9, 1.1)),
-        T.NormalizeScale(),
+        T.Center(),
+        UnitCubeNormalization(),
+        T.SamplePoints(n_points),
     ])  
 
     test_transform = T.Compose([
+        T.Center(),
+        UnitCubeNormalization(),
         T.SamplePoints(n_points),
-        T.NormalizeScale(),
     ])
 
     # Lenght of ModelNet40 dataset is 9,843 for training and 2,468 for testing
     ds_train = ModelNet(root="./dataset/modelnet40", name="40", train=True, transform=train_transform)
     ds_test = ModelNet(root="./dataset/modelnet40", name="40", train=False, transform=test_transform)
 
-    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=4)
-    dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True, num_workers=4)
+    # DataLoader
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True)
+    dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True)
 
     return dl_train, dl_test, train_transform
+
+
+def test_unit_cube_normalizer():
+    # Test UnitCubeNormalizer
+    data = Data(
+        pos=torch.rand((100, 3)),
+        )
+
+    normalizer = UnitCubeNormalization()
+    normalized_data = normalizer(data)
+
+    print(normalized_data.pos)
 
 
 def visualize_modelnet40():
@@ -164,11 +151,11 @@ def visualize_modelnet40():
     config.categories = categories
 
     transform = T.Compose([
-        T.SamplePoints(config.display_sample),
-        ZeroCenter(),
+        T.Center(),
         T.RandomScale((0.9, 1.1)),
         T.Center(),
-        UnitCubeNormalizer(),
+        UnitCubeNormalization(),
+        T.SamplePoints(config.display_sample),
     ])
     
     train_dataset = ModelNet(
@@ -187,7 +174,7 @@ def visualize_modelnet40():
 
     table = wandb.Table(columns=["Model", "Class", "Split"])
     category_dict = {key: 0 for key in config.categories}
-    for idx in tqdm(range(len(train_dataset))):
+    for idx in tqdm(range(len(train_dataset[:50]))):
         point_cloud = wandb.Object3D(train_dataset[idx].pos.numpy())
         category = config.categories[int(train_dataset[idx].y.item())]
         category_dict[category] += 1
@@ -208,7 +195,7 @@ def visualize_modelnet40():
 
     table = wandb.Table(columns=["Model", "Class", "Split"])
     category_dict = {key: 0 for key in config.categories}
-    for idx in tqdm(range(len(val_dataset))):
+    for idx in tqdm(range(len(val_dataset[:50]))):
         point_cloud = wandb.Object3D(val_dataset[idx].pos.numpy())
         category = config.categories[int(val_dataset[idx].y.item())]
         category_dict[category] += 1
@@ -233,3 +220,4 @@ def visualize_modelnet40():
 
 if __name__ == "__main__":
     visualize_modelnet40()
+    # test_unit_cube_normalizer()

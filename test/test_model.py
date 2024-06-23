@@ -11,7 +11,7 @@ class ModelTest(unittest.TestCase):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         cfg = PerceiverModelNet40Cfg()
         model, _ = get_perceiver_model(cfg, device)
-        input_tensor = torch.randint(16, 2048, 3).to(device)
+        input_tensor = torch.randint(0, 1220, (16, 2048, 3)).to(device)
         optimizer = torch_optimizer.Lamb(model.parameters(), lr=1e-3)
         output_tensor = model(input_tensor)
         loss = output_tensor[0].sum()
