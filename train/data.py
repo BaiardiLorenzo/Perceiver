@@ -83,11 +83,11 @@ def get_modelnet40_loaders(batch_size: int):
 
     """
     paper_transforms = T.Compose([
+        T.SamplePoints(2048),
         T.Center(),
         T.RandomScale((0.99, 1.01)),
         T.Center(),
         UnitCubeNormalizer(),
-        T.SamplePoints(2048),
     ])
     """
 

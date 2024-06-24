@@ -10,8 +10,8 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
-    batch_size = 16 # 16 with 1024 latent dim  # 512 
-    gradient_acc_steps = 32
+    batch_size = 16 # 512 
+    gradient_acc_steps = 1  # 32 x 16 = 512
 
     # Load the ModelNet40 dataset
     dataset_name = "ModelNet40"
@@ -21,7 +21,7 @@ def main():
     model, cfg = get_perceiver_model(PerceiverModelNet40Cfg(), device)
     
     # Parameters for training
-    early_stop = True
+    early_stop = False
     epochs = 100  
     lr = 1e-3
 

@@ -7,6 +7,24 @@ from src.positional_encoding import ff_positional_encoding, fourier_features
 
 class PositionalEmbeddingTest(unittest.TestCase):
 
+    def test_list_positions(self):
+        """
+        Test to create a list of positions for each axis
+        
+        :return: List of positions for each axis
+        """
+        dims = (4, 5)
+        
+        xd = torch.stack(list(torch.meshgrid(
+        *(torch.linspace(-1, 1, steps=dim) for dim in dims),
+        indexing="ij",
+        )), dim=-1)
+        print(xd)
+        print(xd.shape)
+
+        # Assert that the shape of the positions is correct: [[Dims], len(Dims)]
+        self.assertEqual(xd.shape, torch.Size([4, 5, 2]))
+
     def test_create_fourier_encode(self):
         """
         Test to create the fourier encoding of the input tensor
