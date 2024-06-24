@@ -3,8 +3,7 @@ import torch
 
 from math import pi
 
-from src.positional_encoding import fourier_encode
-from src.positional_encoding import positional_embedding
+from src.positional_encoding import ff_positional_encoding, fourier_features
 
 class PositionalEmbeddingTest(unittest.TestCase):
 
@@ -76,7 +75,7 @@ class PositionalEmbeddingTest(unittest.TestCase):
         self.assertEqual(xd.shape, torch.Size(dims + [len(dims)]))
         
         # Encode the positions with a fourier feature encoding
-        enc_pos = fourier_encode(xd, max_freq, num_bands)
+        enc_pos = fourier_features(xd, max_freq, num_bands)
 
         # Assert that the shape of the encoded positions is correct: [[Dims], len(Dims), num_bands * 2 + 1]
         self.assertEqual(enc_pos.shape, torch.Size(dims + [len(dims)] + [num_bands * 2 + 1]))
@@ -115,7 +114,7 @@ class PositionalEmbeddingTest(unittest.TestCase):
         b, *dims, c = x.shape
 
         # Add the positional embedding to the input tensor
-        x = positional_embedding(x, max_freq, num_bands)
+        x = ff_positional_encoding(x, max_freq, num_bands)
 
         # Assert that the shape of the input tensor is correct: [Batch, [Dims], len(Dims)*(num_bands * 2 + 1) + Channels]
         self.assertEqual(x.shape, torch.Size([b] + dims + [len(dims) * (num_bands * 2 + 1) + c]))
@@ -127,6 +126,22 @@ class PositionalEmbeddingTest(unittest.TestCase):
         # print(f"Result of positional embedding: {x}")
         self.assertTrue(torch.any(x != 0))
         self.assertFalse(torch.any(torch.isnan(x)))
+
+    
+    def test_ff_formula(self):
+        """
+        Test the formula for the Fourier features
+
+        :return: Check if the formula is correct
+        """
+        input_shapes = 1
+        num_bands = 64
+        input_dim = 3
+
+        # FORMULA: results 132 
+        input_dim = (input_shapes * (num_bands * 2 + 1)) + input_dim
+
+        self.assertEqual(input_dim, 132)
                          
 
 if __name__ == '__main__':

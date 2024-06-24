@@ -93,17 +93,15 @@ def get_modelnet40_loaders(batch_size: int):
 
     n_points = 2048  
     train_transform = T.Compose([
+        T.SamplePoints(n_points),
         T.Center(),
         T.RandomScale((0.99, 1.01)),
-        T.Center(),
-        UnitCubeNormalization(),
-        T.SamplePoints(n_points),
+        T.NormalizeScale(),
     ])  
 
     test_transform = T.Compose([
-        T.Center(),
-        UnitCubeNormalization(),
         T.SamplePoints(n_points),
+        T.NormalizeScale(),
     ])
 
     # Lenght of ModelNet40 dataset is 9,843 for training and 2,468 for testing
@@ -219,5 +217,5 @@ def visualize_modelnet40():
 
 
 if __name__ == "__main__":
-    visualize_modelnet40()
-    # test_unit_cube_normalizer()
+    # visualize_modelnet40()
+    test_unit_cube_normalizer()

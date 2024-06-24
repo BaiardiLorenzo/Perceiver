@@ -29,7 +29,7 @@ def get_latents_array(
     """
     return nn.Parameter(
         torch.nn.init.trunc_normal_(
-            torch.zeros(latent_length, latent_dim),
+            torch.zeros((latent_length, latent_dim)),
             mean=mean,
             std=std,
             a=a, b=b

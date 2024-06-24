@@ -22,6 +22,7 @@ def train_evaluate_model(
         dl_test: DataLoader, 
         train_trans: str,
         batch_size: int, 
+        gas: int,
         lr: int, 
         epochs: int, 
         opt: optim.Optimizer, 
@@ -30,10 +31,10 @@ def train_evaluate_model(
     ):
 
     time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    test_name = "Perceiver::"+time+"_"+dataset_name+"_epochs:"+str(epochs)+"_bs:"+str(batch_size)+"_lr:"+str(lr)
+    test_name = "Perceiver::"+time+"_"+dataset_name+"_epochs:"+str(epochs)+"_bs:"+str(batch_size)+"_gradaccu:"+str(gas)+"_lr:"+str(lr)
     test_name_cfg = test_name + "_cfg:" + str(cfg) + "_dataset_transform:" + train_trans
 
-    wandb_init(test_name_cfg, model, cfg, dataset_name, train_trans, epochs, batch_size, lr, device)
+    wandb_init(test_name_cfg, model, cfg, dataset_name, train_trans, epochs, batch_size, gas, lr, device)
 
     # Train and evaluate the model
     train_results = {"loss": [], "acc": [], "class_rep": []}
@@ -44,7 +45,7 @@ def train_evaluate_model(
 
     for epoch in range(epochs):
         # Train the model 
-        train_loss, train_acc, train_class_rep = train_epoch(model, dl_train, epoch, opt, device=device)
+        train_loss, train_acc, train_class_rep = train_epoch(model, dl_train, epoch, gas, opt, device=device)
 
         # Evaluate the model
         val_loss, val_acc, val_class_rep = evaluate_epoch(model, dl_test, device=device)
@@ -87,7 +88,7 @@ def train_evaluate_model(
         print(f"Model saved to {model_states_path}")
 
 
-def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, lr, device, project="Deep Learning Exam"):
+def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, gas, lr, device, project="Deep Learning Exam"):
     # Initialize wandb
     wandb.init(
         project=project,
@@ -108,6 +109,7 @@ def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, lr, devi
             "num_bands": cfg.num_bands,
             "epochs": epochs,
             "batch_size": bs,
+            "gradient_accumulation": gas,
             "lr": lr,
             "optimizer": "Lamb",
             "device": device.type
@@ -116,19 +118,20 @@ def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, lr, devi
     wandb.watch(model, nn.CrossEntropyLoss(), log="all")
 
 
-def train_epoch(model: nn.Module, data: DataLoader, epoch: int, opt: optim.Optimizer, device="cuda"):
+def train_epoch(model: nn.Module, data: DataLoader, epoch: int, gas: int, opt: optim.Optimizer, device="cuda"):
     model.train()
 
     losses = []
     gts = []
     preds = []
-    for (_, batch) in enumerate(tqdm(data, desc=f"Training epoch {epoch}", leave=True)):
+
+    # Zero out the gradients
+    opt.zero_grad()
+    
+    for (i, batch) in enumerate(tqdm(data, desc=f"Training epoch {epoch}", leave=True)):
         # Get the input and target data and move it to the device
         xs, _ = to_dense_batch(batch.pos, batch=batch.batch)
         xs, ys = xs.to(device), batch.y.to(device)
-
-        # Zero out the gradients
-        opt.zero_grad()
 
         # Forward pass
         logits = model(xs)
@@ -137,13 +140,18 @@ def train_epoch(model: nn.Module, data: DataLoader, epoch: int, opt: optim.Optim
         pred = torch.argmax(logits, 1)
         
         # Compute the cross entropy loss
-        loss = F.cross_entropy(logits, ys)
+        loss = F.cross_entropy(logits, ys)/gas
 
         # Backward pass
         loss.backward()
 
-        # Update the model parameters
-        opt.step()
+        # Gradient accumulation
+        if (i+1) % gas == 0 or (i+1) == len(data):
+            # Update the model parameters
+            opt.step()
+
+            # Zero out the gradients
+            opt.zero_grad()
 
         # Append the loss, predictions and ground truths
         losses.append(loss.item())

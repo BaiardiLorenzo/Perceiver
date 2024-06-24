@@ -32,12 +32,9 @@ class MultiHeadAttention(nn.Module):
 
         super().__init__()
         self.query_dim = query_dim 
-        self.kv_dim = kv_dim
+        self.kv_dim = kv_dim if kv_dim is not None else query_dim
         self.heads = heads 
 
-        if self.kv_dim is None:
-            self.kv_dim = query_dim
-        
         assert self.kv_dim % self.heads == 0, f"The linear layer dimension {self.kv_dim} for q, k, v must be divisible by the number of heads {self.heads}"
 
         self.dk = self.kv_dim // self.heads 
@@ -132,13 +129,13 @@ class DenseBlock(nn.Module):
         but we found this led to degraded performance, so no dropout is used.
     """
      
-    def __init__(self, latent_dim: int, dropout: Optional[float]=0.0):
+    def __init__(self, latent_dim: int, dropout: Optional[float]= 0):
         """
         Initialize the DenseBlock layer
 
         Args:
             latent_dim (int): The latent dimension
-            dropout (float, optional): The dropout rate. Defaults to 0.0.
+            dropout (float, optional): The dropout rate. Defaults to 0
         """
         super().__init__()
         self.norm = nn.LayerNorm(latent_dim)
@@ -156,7 +153,7 @@ class DenseBlock(nn.Module):
             - Apply a linear layer keeping the same dimension
             - Apply GELU activation function
             - Apply a linear layer keeping the same dimension
-            - Apply dropout (if dropout > 0.0)
+            - Apply dropout (if dropout > 0)
 
         Args:
             x (Tensor): input tensor [Batch, Lenght, Latent_dim]
@@ -180,7 +177,7 @@ class CrossAttention(nn.Module):
         layer to project it to the same number of channels in the
         query inputs (so it can be added residually).
     """
-    def __init__(self, latent_dim: int, input_dim: int, heads: Optional[int] = 1, dropout: Optional[float] = 0.0):
+    def __init__(self, latent_dim: int, input_dim: int, dropout: Optional[float] = 0):
         """
         Initialize the CrossAttention module
 
@@ -188,7 +185,7 @@ class CrossAttention(nn.Module):
             latent_dim (int): The latent dimension
             input_dim (int): The input dimension
             heads (int, optional): The number of heads. Defaults to 1.
-            dropout (float, optional): The dropout rate. Defaults to 0.0.
+            dropout (float, optional): The dropout rate. Defaults to 0.
         """
         super().__init__()
 
@@ -197,7 +194,7 @@ class CrossAttention(nn.Module):
         self.kv_norm = nn.LayerNorm(input_dim)
 
         # Cross attention
-        self.mha = MultiHeadAttention(latent_dim, input_dim, heads, dropout=dropout)
+        self.mha = MultiHeadAttention(latent_dim, input_dim, dropout=dropout)
 
         # Dense layer
         self.dense = DenseBlock(latent_dim, dropout=dropout)
@@ -290,7 +287,7 @@ class SelfAttention(nn.Module):
 
 
 class LatentTransformer(nn.Module):
-    def __init__(self, latent_dim: int, heads: int, latent_blocks: int, dropout: float=0.0):
+    def __init__(self, latent_dim: int, heads: int, latent_blocks: int, dropout: Optional[float]= 0):
         """
         Initialize the LatentTransformer module
 
@@ -298,7 +295,7 @@ class LatentTransformer(nn.Module):
             latent_dim (int): The latent dimension
             heads (int): The number of heads
             latent_blocks (int): The number of latent blocks
-            dropout (float, optional): The dropout rate. Defaults to 0.0.
+            dropout (float, optional): The dropout rate. Defaults to 0.
         """
         super().__init__()
 
@@ -319,7 +316,7 @@ class LatentTransformer(nn.Module):
 
 
 class PerceiverBlock(nn.Module):
-    def __init__(self, latent_dim: int, input_dim: int, latent_blocks: int, heads: int, dropout: float=0.0):
+    def __init__(self, latent_dim: int, input_dim: int, latent_blocks: int, heads: int, dropout: Optional[float] = 0):
         """
         Initialize the PerceiverBlock module:
             - Cross attention
@@ -351,8 +348,8 @@ class PerceiverBlock(nn.Module):
             z (Tensor): latent tensor
             mask (Tensor, optional): mask tensor. Defaults to None.
         """
-        x = self.cross_attention(x, z, mask)
-        return self.latent_transform(x)
+        z = self.cross_attention(x, z, mask)
+        return self.latent_transform(z)
 
 
 class Decoder(nn.Module):

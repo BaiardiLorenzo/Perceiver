@@ -10,7 +10,8 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
-    batch_size = 32 # 16 with 1024 latent dim  # 512 
+    batch_size = 16 # 16 with 1024 latent dim  # 512 
+    gradient_acc_steps = 32
 
     # Load the ModelNet40 dataset
     dataset_name = "ModelNet40"
@@ -34,6 +35,7 @@ def main():
         dl_test = dl_test, 
         train_trans = str(train_trans),
         batch_size = batch_size, 
+        gas = gradient_acc_steps,
         lr = lr, 
         epochs = epochs, 
         opt = opt, 

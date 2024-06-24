@@ -85,9 +85,11 @@ class Perceiver(nn.Module):
         
         # Perceiver blocks
         # If share_weights is True, we share the weights of the model
-        self.layers = nn.ModuleList([PerceiverBlock(latent_dim, input_dim, latent_blocks, heads) for _ in range(perceiver_block)])
         if share_weights:
-            self.layers = nn.ModuleList([self.layers[0] for _ in range(perceiver_block)])
+            pb = PerceiverBlock(latent_dim, input_dim, latent_blocks, heads)
+            self.layers = nn.ModuleList([pb for _ in range(perceiver_block)])
+        else:
+            self.layers = nn.ModuleList([PerceiverBlock(latent_dim, input_dim, latent_blocks, heads) for _ in range(perceiver_block)])
 
         # Decoder
         self.decoder = Decoder(latent_dim, num_classes)
