@@ -209,7 +209,7 @@ def evaluate_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch:
     class_report = classification_report(gts, preds, zero_division=0, digits=3, output_dict=True)
     class_report_db = classification_report(gts, preds, zero_division=0, digits=3).splitlines()
     report_table = []
-    for line in class_report[2:(len(class_names)+2)]:
+    for line in class_report_db[2:(len(class_names)+2)]:
         report_table.append(line.split())
 
     # Log the results
