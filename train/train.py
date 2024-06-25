@@ -18,6 +18,7 @@ def train_evaluate_model(
         model: nn.Module, 
         cfg,
         dataset_name: str,
+        class_names: list,
         dl_train: DataLoader, 
         dl_test: DataLoader, 
         train_trans: str,
@@ -45,10 +46,10 @@ def train_evaluate_model(
 
     for epoch in range(epochs):
         # Train the model 
-        train_loss, train_acc, train_class_rep = train_epoch(model, dl_train, epoch, gas, opt, device=device)
+        train_loss, train_acc, train_class_rep = train_epoch(model, dl_train, class_names, epoch, gas, opt, device=device)
 
         # Evaluate the model
-        val_loss, val_acc, val_class_rep = evaluate_epoch(model, dl_test, device=device)
+        val_loss, val_acc, val_class_rep = evaluate_epoch(model, dl_test, class_names, epoch, device=device)
 
         print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
@@ -64,12 +65,6 @@ def train_evaluate_model(
         val_results["loss"].append(val_loss)
         val_results["acc"].append(val_acc)
         val_results["class_rep"].append(val_class_rep)
-
-        # Log the results
-        wandb.log({"train/epoch": epoch, "train/loss": train_loss, "train/accuracy": train_acc}, step=epoch)
-        wandb.log({"train_class_rep/classification_report": train_class_rep}, step=epoch)
-        wandb.log({"val/epoch": epoch, "val/loss": val_loss, "val/accuracy": val_acc}, step=epoch)
-        wandb.log({"val_class_rep/classification_report": val_class_rep}, step=epoch)
 
         # Check early stopping criteria
         early_stopping(val_loss)
@@ -118,7 +113,7 @@ def wandb_init(test_name, model, cfg, dataset, train_trans, epochs, bs, gas, lr,
     wandb.watch(model, nn.CrossEntropyLoss(), log="all")
 
 
-def train_epoch(model: nn.Module, data: DataLoader, epoch: int, gas: int, opt: optim.Optimizer, device="cuda"):
+def train_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch: int, gas: int, opt: optim.Optimizer, device="cuda"):
     model.train()
 
     losses = []
@@ -162,11 +157,20 @@ def train_epoch(model: nn.Module, data: DataLoader, epoch: int, gas: int, opt: o
     accuracy = accuracy_score(gts, preds)
     class_report = classification_report(gts, preds, zero_division=0, digits=3, output_dict=True)
 
+    # Log the results
+    loss = np.mean(losses)
+    wandb.log({"train/epoch": epoch, 
+                "train/loss": loss, 
+                "train/accuracy": accuracy, 
+                "train/confusion_matrix": wandb.plot.confusion_matrix(y_true=gts, preds=preds, class_names=class_names),
+                "train/classification_report": wandb.Table(data=class_report, columns=["Class", "Precision", "Recall", "F1-score", "Support"])},
+                step=epoch)
+
     # Return the average loss, accuracy and classification report
-    return np.mean(losses), accuracy, class_report
+    return loss, accuracy, class_report
 
 
-def evaluate_epoch(model: nn.Module, data: DataLoader, device="cuda"):
+def evaluate_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch: int, device="cuda"):
     model.eval()
 
     losses = []
@@ -196,7 +200,17 @@ def evaluate_epoch(model: nn.Module, data: DataLoader, device="cuda"):
     # Compute the accuracy and classification report
     accuracy = accuracy_score(gts, preds)
     class_report = classification_report(gts, preds, zero_division=0, digits=3, output_dict=True)
-    return np.mean(losses), accuracy, class_report
+
+    # Log the results
+    loss = np.mean(losses)
+    wandb.log({"val/epoch": epoch, 
+               "val/loss": loss, 
+               "val/accuracy": accuracy,
+               "val/confusion_matrix": wandb.plot.confusion_matrix(y_true=gts, preds=preds, class_names=class_names),
+               "val/classification_report": wandb.Table(data=class_report, columns=["Class", "Precision", "Recall", "F1-score", "Support"])}, 
+               step=epoch)
+    
+    return loss, accuracy, class_report
 
 
 class EarlyStopping:

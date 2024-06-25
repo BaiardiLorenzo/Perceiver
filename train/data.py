@@ -90,6 +90,7 @@ def get_modelnet40_loaders(batch_size: int):
         UnitCubeNormalizer(),
     ])
     """
+    class_names = ['airplane', 'bathtub', 'bed', 'bench', 'bookshelf', 'bottle', 'bowl', 'car', 'chair', 'cone', 'cup', 'curtain', 'desk', 'door', 'dresser', 'flower_pot', 'glass_box', 'guitar', 'keyboard', 'lamp', 'laptop', 'mantel', 'monitor', 'night_stand', 'person', 'piano', 'plant', 'radio', 'range_hood', 'sink', 'sofa', 'stairs', 'stool', 'table', 'tent', 'toilet', 'tv_stand', 'vase', 'wardrobe', 'xbox']
 
     n_points = 2048  
     train_transform = T.Compose([
@@ -112,7 +113,7 @@ def get_modelnet40_loaders(batch_size: int):
     dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True)
     dl_test = DataLoader(ds_test, batch_size=batch_size, shuffle=True)
 
-    return dl_train, dl_test, train_transform
+    return dl_train, dl_test, train_transform, class_names
 
 
 def test_unit_cube_normalizer():

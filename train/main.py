@@ -15,7 +15,7 @@ def main():
 
     # Load the ModelNet40 dataset
     dataset_name = "ModelNet40"
-    dl_train, dl_test, train_trans = get_modelnet40_loaders(batch_size)
+    dl_train, dl_test, train_trans, class_names = get_modelnet40_loaders(batch_size)
 
     # Create the Perceiver model
     model, cfg = get_perceiver_model(PerceiverModelNet40Cfg(), device)
@@ -31,6 +31,7 @@ def main():
         model = model, 
         cfg = cfg,
         dataset_name = dataset_name,
+        class_names = class_names,
         dl_train = dl_train, 
         dl_test = dl_test, 
         train_trans = str(train_trans),

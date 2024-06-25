@@ -42,7 +42,7 @@ class PerceiverModelNet40Cfg():
     heads: int = 8
     perceiver_block: int = 2
     share_weights: bool = False
-    ff_pos_encoding: bool = True
+    ff_pos_encoding: bool = False
     input_shapes: int = 1
     max_freq: int = 1120
     num_bands: int = 64
