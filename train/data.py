@@ -129,8 +129,8 @@ def test_unit_cube_normalizer():
 
 
 def visualize_modelnet40():
-    wandb_project = "pyg-point-cloud" #@param {"type": "string"}
-    wandb_run_name = "modelnet40/train/sampling-comparison" #@param {"type": "string"}
+    wandb_project = "ModelNet40_PointCloud" #@param {"type": "string"}
+    wandb_run_name = "ModelNet40_NormalizeScale" #@param {"type": "string"}
 
     wandb.init(project=wandb_project, name=wandb_run_name, job_type="eda")
 
@@ -150,11 +150,10 @@ def visualize_modelnet40():
     config.categories = categories
 
     transform = T.Compose([
+        T.SamplePoints(config.display_sample),
         T.Center(),
         T.RandomScale((0.9, 1.1)),
-        T.Center(),
-        UnitCubeNormalization(),
-        T.SamplePoints(config.display_sample),
+        T.NormalizeScale(),
     ])
     
     train_dataset = ModelNet(
@@ -218,5 +217,5 @@ def visualize_modelnet40():
 
 
 if __name__ == "__main__":
-    # visualize_modelnet40()
-    test_unit_cube_normalizer()
+    visualize_modelnet40()
+    # test_unit_cube_normalizer()
