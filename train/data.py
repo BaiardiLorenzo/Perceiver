@@ -10,6 +10,8 @@ from torch_geometric.transforms import BaseTransform
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 
+from src.config import PerceiverModelNet40Cfg, get_perceiver_model
+
 
 class UnitCubeNormalization(BaseTransform):
     def __call__(self, data: Data) -> Data:
@@ -87,14 +89,14 @@ def get_modelnet40_loaders(batch_size: int):
         T.Center(),
         T.RandomScale((0.99, 1.01)),
         T.Center(),
-        UnitCubeNormalizer(),
+        UnitCubeNormalization(),
     ])
     """
     class_names = ['airplane', 'bathtub', 'bed', 'bench', 'bookshelf', 'bottle', 'bowl', 'car', 'chair', 'cone', 'cup', 'curtain', 'desk', 'door', 'dresser', 'flower_pot', 'glass_box', 'guitar', 'keyboard', 'lamp', 'laptop', 'mantel', 'monitor', 'night_stand', 'person', 'piano', 'plant', 'radio', 'range_hood', 'sink', 'sofa', 'stairs', 'stool', 'table', 'tent', 'toilet', 'tv_stand', 'vase', 'wardrobe', 'xbox']
 
     n_points = 2048  
     train_transform = T.Compose([
-        T.SamplePoints(n_points),
+        T.SamplePoints(2048),
         T.Center(),
         T.RandomScale((0.99, 1.01)),
         T.NormalizeScale(),
@@ -172,7 +174,7 @@ def visualize_modelnet40():
 
     table = wandb.Table(columns=["Model", "Class", "Split"])
     category_dict = {key: 0 for key in config.categories}
-    for idx in tqdm(range(len(train_dataset[:50]))):
+    for idx in tqdm(range(len(train_dataset))):
         point_cloud = wandb.Object3D(train_dataset[idx].pos.numpy())
         category = config.categories[int(train_dataset[idx].y.item())]
         category_dict[category] += 1
@@ -193,7 +195,7 @@ def visualize_modelnet40():
 
     table = wandb.Table(columns=["Model", "Class", "Split"])
     category_dict = {key: 0 for key in config.categories}
-    for idx in tqdm(range(len(val_dataset[:50]))):
+    for idx in tqdm(range(len(val_dataset))):
         point_cloud = wandb.Object3D(val_dataset[idx].pos.numpy())
         category = config.categories[int(val_dataset[idx].y.item())]
         category_dict[category] += 1

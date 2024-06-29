@@ -160,7 +160,7 @@ def train_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch: in
 
     report_table = []
     for line in class_report_db[2:(len(class_names)+2)]:
-        report_table.append(line.split())
+       report_table.append(line.split())
 
     # Log the results
     loss = np.mean(losses)
@@ -170,7 +170,8 @@ def train_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch: in
         "train/accuracy": accuracy, 
         "train_class_rep/classification_report": class_report,
         "train/confusion_matrix": wandb.plot.confusion_matrix(y_true=gts, preds=preds, class_names=class_names),
-        "train/classification_report": wandb.Table(data=report_table, columns=["Class", "Precision", "Recall", "F1-score", "Support"])},
+        "train/classification_report": wandb.Table(data=report_table, columns=["Class", "Precision", "Recall", "F1-score", "Support"])
+        },
         step=epoch)
 
     # Return the average loss, accuracy and classification report
@@ -207,6 +208,7 @@ def evaluate_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch:
     # Compute the accuracy and classification report
     accuracy = accuracy_score(gts, preds)
     class_report = classification_report(gts, preds, zero_division=0, digits=3, output_dict=True)
+
     class_report_db = classification_report(gts, preds, zero_division=0, digits=3).splitlines()
     report_table = []
     for line in class_report_db[2:(len(class_names)+2)]:
@@ -220,7 +222,8 @@ def evaluate_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch:
         "val/accuracy": accuracy,
         "val_class_rep/classification_report": class_report,
         "val/confusion_matrix": wandb.plot.confusion_matrix(y_true=gts, preds=preds, class_names=class_names),
-        "val/classification_report": wandb.Table(data=report_table, columns=["Class", "Precision", "Recall", "F1-score", "Support"])}, 
+        "val/classification_report": wandb.Table(data=report_table, columns=["Class", "Precision", "Recall", "F1-score", "Support"])
+        }, 
         step=epoch)
     
     return loss, accuracy, class_report
