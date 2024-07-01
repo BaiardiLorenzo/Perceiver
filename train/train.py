@@ -149,7 +149,7 @@ def train_epoch(model: nn.Module, data: DataLoader, class_names: list, epoch: in
             opt.zero_grad()
 
         # Append the loss, predictions and ground truths
-        losses.append(loss.item())
+        losses.append(loss.item()*gas)
         preds.extend(pred.detach().cpu().numpy())
         gts.extend(ys.detach().cpu().numpy())
 
