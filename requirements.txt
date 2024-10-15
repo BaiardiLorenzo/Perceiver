@@ -1,1 +1,14 @@
 # FIX Requirements.txt
+einops
+matplotlib
+numpy
+pandas
+Pillow
+scikit-learn
+scipy
+torch
+torch-geometric
+torch-optimizer
+torchaudio
+torchvision
+tqdm
